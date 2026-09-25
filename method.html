@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Method &amp; sources — Execution Quality Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+  <a class="brand" href="index.html">Execution Quality Check</a>
+  <nav>
+    <a href="index.html">Venue comparison</a>
+    <a href="symbol.html">Symbol explorer</a>
+    <a href="coverage.html">Coverage</a>
+    <a href="method.html" class="active">Method &amp; sources</a>
+  </nav>
+</div></header>
+<div class="wrap">
+  <h1>Method &amp; sources</h1>
+
+  <h2>What this is</h2>
+  <p>
+    The amended SEC Rule 605 (compliance date 2026-08-01) requires market centers and large
+    broker-dealers to publish, monthly, machine-readable order-execution reports in a standardized
+    format: <strong>detailed reports</strong> as 55-field pipe-delimited files (Rule 605 NMS Plan,
+    Exhibit A) and <strong>summary reports</strong> following the SEC’s Order Execution Summary (OES)
+    CSV schema. The first reporting month is August 2026, due before the end of September 2026.
+    This tool downloads the published files, verifies their hashes, and presents them so venues can
+    be compared — the comparability the standardized format exists to enable.
+  </p>
+
+  <h2>Sources and receipts</h2>
+  <p>Every file used is hash-receipted at download time. The receipts (with fetch timestamps and
+    SHA-256 digests) are below.</p>
+  <div class="card">
+    <div class="tablewrap">
+      <table class="receipts" id="receiptsTable">
+        <thead><tr><th>File</th><th class="num">Bytes</th><th>SHA-256</th><th>Fetched (UTC)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-bottom:0">
+      Raw files: venue hosts as linked on each publisher’s Rule 605 page — Cboe’s CDN (BZX /
+      BYX / EDGA / EDGX) and IEX’s report archive on Google Cloud Storage (see
+      <a href="coverage.html">Coverage</a>). Both publishers link their full monthly archive.
+    </p>
+  </div>
+
+  <h2>Read the columns</h2>
+  <ul class="tight">
+    <li><strong>Price improvement rate</strong> — share of executed orders’ quantity that was
+      executed at a price better than the midpoint/quote, as published.</li>
+    <li><strong>Weighted avg price improvement</strong> — share-weighted average improvement amount
+      (as a fraction of midpoint).</li>
+    <li><strong>Executed at quote or better</strong> — share executed at the quote or better.</li>
+    <li><strong>Effective spread</strong> vs <strong>quoted spread</strong> — as a percentage of the
+      midpoint. Smaller effective spread relative to the quoted spread means less of the quoted
+      spread was paid.</li>
+    <li><strong>EFQ</strong> — the effective-to-quoted-spread ratio (effective ÷ quoted; 100% means
+      executions on average paid the full quoted spread).</li>
+    <li><strong>Realized spread (15s / 1 min)</strong> — effective spread relative to the midpoint
+      15 seconds / 1 minute after execution; a market-impact measure.</li>
+    <li><strong>Avg execution time</strong> — share-weighted average time from order receipt to
+      execution, in the time units as reported by the venue (millisecond or finer increments).</li>
+  </ul>
+
+  <h2>Documented normalizations and filters</h2>
+  <div class="card" id="normCard">
+    <ul class="tight" id="normList"></ul>
+  </div>
+
+  <h2>Known filing anomalies found during the build</h2>
+  <div class="card" id="dqCard">
+    <div id="dqList"></div>
+  </div>
+
+  <h2>Internal cross-checks</h2>
+  <div class="card">
+    <div class="tablewrap">
+      <table id="checksTable">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-bottom:0">
+      These are build-time sanity checks of our own aggregation against the venues’ own published
+      aggregates; they document where the two surfaces agree or diverge.
+    </p>
+  </div>
+
+  <h2>Caveats</h2>
+  <ul class="tight">
+    <li>All statistics are <strong>self-published by the venues</strong> and are not audited or
+      verified by the SEC — this tool re-presents them, it does not bless them.</li>
+    <li>Venues differ in market structure and computation methods; averages across venue types are
+      not apples-to-apples (each venue’s own filings say as much).</li>
+    <li>This is the <strong>first month</strong> of the standardized format. Publishers are still
+      coming online and early filings may be corrected or restated; the tool documents what was
+      filed at build time.</li>
+    <li>Per-symbol statistics are <strong>our</strong> share-weighted aggregates of the venues’
+      per-symbol rows (the venues publish no per-symbol aggregates) and exclude rows failing the
+      sanity filters above.</li>
+    <li>Informational only — not investment advice.</li>
+  </ul>
+
+  <footer class="site">
+    Built from public Rule 605 filings for August 2026. Receipts and build artifacts are retained
+    with the source repository.
+  </footer>
+</div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const [meta, validation] = await Promise.all([
+    EQ.loadJSON("data/meta.json"),
+    EQ.loadJSON("data/validation.json"),
+  ]);
+
+  // Receipts
+  const recs = (meta.receipts && meta.receipts.files) || [];
+  document.querySelector("#receiptsTable tbody").innerHTML = recs.map(f =>
+    `<tr><td>${EQ.esc(f.ric)} ${EQ.esc(f.kind)}</td>` +
+    `<td class="num">${EQ.num(f.bytes)}</td>` +
+    `<td><code>${EQ.esc((f.sha256 || "").slice(0, 24))}…</code></td>` +
+    `<td class="num">${EQ.esc(f.fetched_at || "")}</td></tr>`).join("");
+
+  // Normalizations and filters
+  const norm = [];
+  const efq = validation.checks.find(c => c.check === "efq_normalization");
+  if (efq) {
+    const meds = efq.venues.map(v => v.median).join(", ");
+    norm.push(`<li><strong>EFQ units:</strong> the publisher writes the EFQ column in percent-points
+      (31.4 meaning 31.4%) while the schema writes fractions (0.314). Verified as an exact ×100 across
+      all published rows at build time (median ratio per venue: ${EQ.esc(meds)}), and normalized to
+      fractions here. Venues filing the fraction convention as-is (IEX) are verified at build time
+      and used as filed.</li>`);
+  }
+  const dqCheck = validation.checks.find(c => c.check === "data_quality_findings");
+  if (dqCheck) {
+    const ex = dqCheck.stat_suspect_exclusions || [];
+    norm.push(`<li><strong>Sanity filters (weighted statistics only):</strong> rows with
+      |effective spread| &gt; 100% of midpoint, EFQ beyond ±1000%, or quoted spread wider than the
+      midpoint itself are excluded from the share-weighted statistics; quantity sums keep all rows.
+      Exclusions per venue (share of executed volume):
+      ${ex.map(e => `${EQ.esc(e.venue)} ${(e.share_of_executed_volume * 100).toFixed(2)}%`).join(", ")}.</li>`);
+    norm.push(`<li><strong>Notional values excluded:</strong> the detailed files’ notional column
+      (CvrdOrderSize) is not used anywhere in this tool — see the anomaly finding below.</li>`);
+  }
+  document.getElementById("normList").innerHTML = norm.join("");
+
+  // Data-quality findings
+  if (dqCheck) {
+    const parts = [];
+    parts.push(`<p>${EQ.esc(dqCheck.note)}</p>`);
+    const f = (dqCheck.findings || []).filter(x => x.venue === "BATS" || x.venue === "EDGK");
+    if (f.length) {
+      parts.push(`<p class="small"><strong>Sentinel-share by venue (market-order round lots in the
+        boundary buckets):</strong> ` +
+        (dqCheck.findings || []).map(x =>
+          `${EQ.esc(x.venue)}: ${(x.share * 100).toFixed(1)}% of ${EQ.num(x.rows_checked)} rows`).join(" · ") +
+        `.</p>`);
+    }
+    parts.push(`<p class="small muted">These are properties of the filings themselves, recorded so
+      readers can weigh them. If venues restate, later builds will reflect it.</p>`);
+    document.getElementById("dqList").innerHTML = parts.join("");
+  }
+
+  // Cross-checks table
+  const rows = [];
+  const fam = validation.checks.filter(c => c.check === "family_mapping");
+  for (const c of fam) {
+    for (const r of c.results) {
+      const bySize = r.by_size || [];
+      const agree = bySize.filter(s =>
+        s.summary_avg_order_size != null && s.implied_avg_order_size != null &&
+        Math.abs(s.implied_avg_order_size - s.summary_avg_order_size) / Math.max(s.summary_avg_order_size, 1e-9) < 0.05
+      ).length;
+      rows.push([
+        `Mapping ${c.venue}: ${r.summary_type} ↔ ${r.detailed_candidates}`,
+        `${agree}/${bySize.length} size buckets within 5% on avg order size`,
+      ]);
+    }
+  }
+  if (efq) rows.push(["EFQ units (raw ratio to effective/quoted)", `median ${efq.venues.map(v => v.median).join(", ")} ≈ ×100 — normalized`]);
+  document.querySelector("#checksTable tbody").innerHTML = rows.map(r =>
+    `<tr><td>${EQ.esc(r[0])}</td><td>${EQ.esc(r[1])}</td></tr>`).join("");
+})();
+</script>
+</body>
+</html>

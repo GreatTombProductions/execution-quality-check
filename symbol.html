@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Symbol explorer — Execution Quality Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+  <a class="brand" href="index.html">Execution Quality Check</a>
+  <nav>
+    <a href="index.html">Venue comparison</a>
+    <a href="symbol.html" class="active">Symbol explorer</a>
+    <a href="coverage.html">Coverage</a>
+    <a href="method.html">Method &amp; sources</a>
+  </nav>
+</div></header>
+<div class="wrap">
+  <h1>Symbol explorer</h1>
+  <p class="lede">
+    Look up any NMS stock and see how it was executed at each publishing venue in
+    August 2026 — covered orders, executed shares, price improvement and spread
+    statistics, computed from the venues’ detailed per-symbol records.
+  </p>
+
+  <div class="card">
+    <label for="symInput">Ticker symbol</label>
+    <input type="text" id="symInput" placeholder="e.g. AAL, SPY, BRK.B" autocomplete="off" spellcheck="false">
+    <div class="results" id="results"></div>
+    <p class="small muted" id="hint">Type to search 13,299 symbols. Values below are share-weighted averages
+      computed from the detailed records, with sanity filters applied (see <a href="method.html">Method</a>).</p>
+  </div>
+
+  <div id="detail" style="display:none">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; align-items:baseline">
+        <h2 id="symTitle" style="margin:0"></h2>
+        <div class="controls">
+          <div>
+            <label for="sizeSel">Order size</label>
+            <select id="sizeSel"></select>
+          </div>
+          <div>
+            <label for="viewSel">View</label>
+            <select id="viewSel">
+              <option value="sizes" selected>All sizes combined</option>
+              <option value="single">Single size bucket</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="tablewrap" style="margin-top:14px">
+        <table id="symTable"><thead></thead><tbody></tbody></table>
+      </div>
+      <p class="small muted" style="margin-bottom:0" id="symNote"></p>
+    </div>
+  </div>
+
+  <footer class="site">
+    Computed from venue-published Rule 605 detailed records (August 2026). Share-weighted averages of
+    the reported per-symbol values; not official venue aggregates. Informational only — not investment advice.
+  </footer>
+</div>
+<script src="common.js"></script>
+<script src="symbol.js"></script>
+</body>
+</html>

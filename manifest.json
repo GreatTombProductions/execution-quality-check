@@ -1,0 +1,21 @@
+{
+  "name": "Execution Quality Check",
+  "short_name": "execution-quality-check",
+  "slug": "execution-quality-check",
+  "description": "The first month of standardized SEC Rule 605 execution-quality reports (August 2026), made comparable: venue-by-venue spread, price-improvement and execution statistics, plus a per-symbol explorer — exactly as filed, with hash receipts and documented data-quality notes.",
+  "url": "https://greattombproductions.github.io/execution-quality-check/",
+  "repo": "https://github.com/GreatTombProductions/execution-quality-check",
+  "github": "https://github.com/GreatTombProductions/execution-quality-check",
+  "data_source": "Venue-published SEC Rule 605 amended-format reports for August 2026: Cboe BZX/BYX/EDGA/EDGX and IEX detailed 55-field pipe-delimited files + OES summary CSVs, fetched with SHA-256 receipts",
+  "data_url": "https://www.cboe.com/markets/us/equities/regulation/605/bzx",
+  "records": "5 venues; 2,667,102 detailed rows; 13,299 symbols; 179 published summary rows; 73.1B executed shares (as filed)",
+  "detail": "Venue comparison by order size band × stock universe × order type across the published statistics (price improvement, at-quote rate, effective/quoted spread, EFQ, realized spreads); per-symbol explorer comparing venues for any covered stock; coverage ledger of which publishers are live with probe evidence; method page with file receipts, normalizations, sanity filters and filing anomalies found during the build.",
+  "asymmetry": "Brokers and venues benefit when execution quality stays fragmented across hundreds of separate monthly downloads; the standardized format exists so executions can be compared, but nobody has assembled the comparison. Investors comparing venues — or checking whether their fills are measurably worse than the market's — need the portage layer: many Download Sites → searchable, comparable tables.",
+  "pipeline_note": "Header-driven parsing of the 55-field detailed files; EFQ unit normalization (verified ×100 on every Cboe row; IEX files verified schema-conformant and used as filed); conservative row-sanity filters for weighted statistics only (exclusions counted per venue, 2-10% of executed volume on Cboe, ~0.01% on IEX); notional fields excluded due to sentinel-value anomalies found in the first filings; 2026-09-25 refresh build (IEX added — published 2026-09-25) with Playwright browser smoke over the staged site; static, no backend.",
+  "search_modes": ["venue comparison", "symbol lookup"],
+  "released_date": "2026-09-22",
+  "status": "released",
+  "deploy_branch": "gh-pages",
+  "deploy_method": "static",
+  "feedback_categories": ["data", "source-drift", "methodology", "bug"]
+}

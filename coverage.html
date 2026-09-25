@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coverage — Execution Quality Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+  <a class="brand" href="index.html">Execution Quality Check</a>
+  <nav>
+    <a href="index.html">Venue comparison</a>
+    <a href="symbol.html">Symbol explorer</a>
+    <a href="coverage.html" class="active">Coverage</a>
+    <a href="method.html">Method &amp; sources</a>
+  </nav>
+</div></header>
+<div class="wrap">
+  <h1>Who has published — August 2026</h1>
+  <p class="lede" id="coverageLede">
+    The amended Rule 605 reports for August 2026 are due before the end of September 2026,
+    and publishers are still coming online. This page records exactly what this tool could and
+    could not verify — a documented gap beats a silent one.
+  </p>
+
+  <div class="card">
+    <div class="tablewrap">
+      <table id="covTable">
+        <thead><tr><th>Publisher</th><th>Role</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Probe log</h2>
+  <div class="card">
+    <div class="tablewrap">
+      <table id="probeTable">
+        <thead><tr><th>Target</th><th>URL</th><th class="num">HTTP</th><th>Checked (UTC)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-bottom:0" id="censusNote"></p>
+  </div>
+
+  <footer class="site">
+    Coverage reflects probing at build time from a single vantage point; some publishers may serve
+    content that could not be verified from here. Re-checked as deadlines approach.
+  </footer>
+</div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const cov = await EQ.loadJSON("data/coverage.json");
+  document.getElementById("coverageLede").textContent =
+    `Amended-format Rule 605 reports for ${cov.month_label} are due before the end of September 2026. ` +
+    `This page records exactly what this tool could and could not verify at build time ` +
+    `(${cov.checked_at}).`;
+
+  document.querySelector("#covTable tbody").innerHTML = cov.entries.map(e => {
+    const url = e.url ? `<a href="${EQ.esc(e.url)}" rel="noopener">link</a>` : "";
+    return `<tr><td>${EQ.esc(e.org)}</td><td>${EQ.esc(e.role)}</td>` +
+      `<td>${EQ.statusBadge(e.status)}</td>` +
+      `<td style="text-align:left; white-space:normal; max-width:520px">${EQ.esc(e.evidence)} ${url}</td></tr>`;
+  }).join("");
+
+  document.querySelector("#probeTable tbody").innerHTML = (cov.probes || []).map(p =>
+    `<tr><td>${EQ.esc(p.label)}</td>` +
+    `<td style="text-align:left"><code>${EQ.esc(p.url)}</code></td>` +
+    `<td class="num">${EQ.esc(p.http_status || "—")}</td>` +
+    `<td class="num">${EQ.esc(p.checked_at || "")}</td></tr>`).join("");
+
+  const census = cov.census && cov.census.shared_host_public_s3_com;
+  if (census) {
+    document.getElementById("censusNote").textContent =
+      `Sampled census: ${census.note} (${census.directories_with_202608} of ` +
+      `${census.directories_scanned} directories contained an August-2026 file).`;
+  }
+})();
+</script>
+</body>
+</html>
