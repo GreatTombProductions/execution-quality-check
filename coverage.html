@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coverage — Execution Quality Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+  <a class="brand" href="index.html">Execution Quality Check</a>
+  <nav>
+    <a href="index.html">Reporter comparison</a>
+    <a href="symbol.html">Symbol explorer</a>
+    <a href="coverage.html" class="active">Coverage</a>
+    <a href="method.html">Method &amp; sources</a>
+  </nav>
+</div></header>
+<div class="wrap">
+  <h1>Who has published — August 2026</h1>
+  <p class="lede" id="coverageLede"></p>
+
+  <div class="card" id="countCard"></div>
+
+  <h2>Exchanges and venue groups</h2>
+  <div class="card">
+    <div class="tablewrap">
+      <table id="covTable" class="wrapcells">
+        <thead><tr><th>Publisher</th><th>Role</th><th>Status</th><th>Evidence</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>FINRA-registered reporters</h2>
+  <div class="card">
+    <div class="controls">
+      <div>
+        <label for="repStatus">Status</label>
+        <select id="repStatus"></select>
+      </div>
+      <div>
+        <label for="repType">Reporter type</label>
+        <select id="repType"></select>
+      </div>
+      <div>
+        <label for="repFind">Find a firm</label>
+        <input type="text" id="repFind" placeholder="e.g. Webull, Fidelity" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="tablewrap" style="margin-top:14px">
+      <table id="repTable" class="wrapcells">
+        <thead><tr><th>Firm</th><th>Code</th><th>Type</th><th>Status</th><th>What was checked</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-bottom:0" id="repNote"></p>
+  </div>
+
+  <h2>Probe log</h2>
+  <div class="card">
+    <div class="tablewrap">
+      <table id="probeTable">
+        <thead><tr><th>Target</th><th>URL</th><th class="num">HTTP</th><th>Checked (UTC)</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-bottom:0" id="censusNote"></p>
+  </div>
+
+  <footer class="site">
+    Coverage reflects probing at build time from a single vantage point; some publishers may serve
+    content that could not be verified from here. “Not found” is a statement about what this sweep
+    could see, not about what a firm filed.
+  </footer>
+</div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const cov = await EQ.loadJSON("data/coverage.json");
+  const meta = await EQ.loadJSON("data/meta.json");
+  document.getElementById("coverageLede").textContent =
+    `The amended Rule 605 reports for ${cov.month_label} were due before the end of September 2026. ` +
+    `This page records what this tool could and could not verify — a documented gap beats a silent one. ` +
+    `Sweep run ${cov.harvested_at || cov.checked_at}.`;
+
+  const rc = cov.reporter_counts || {};
+  const nReg = (cov.reporters || []).length;
+  const nEx = meta.venues.filter(v => v.kind === "exchange").length;
+  const nExtra = meta.counts.venues - nEx - (rc.live_amended || 0);
+  document.getElementById("countCard").innerHTML =
+    `<strong>${meta.counts.venues}</strong> reporters in this build ` +
+    `(${nEx} exchange venues + ${rc.live_amended || 0} of ${nReg} FINRA-registered firms` +
+    (nExtra > 0 ? ` + ${nExtra} further reporter code${nExtra === 1 ? "" : "s"} found on registered firms’ own pages` : "") +
+    `; ${meta.counts.nil_reports} filed nil reports with no covered orders). ` +
+    `Not in the build: ` + Object.entries(rc).filter(([k]) => k !== "live_amended")
+      .map(([k, v]) => `${v} ${k.replace(/_/g, " ")}`).join(", ") + ` among registered firms.`;
+
+  document.querySelector("#covTable tbody").innerHTML = cov.entries.map(e => {
+    const url = e.url ? `<a href="${EQ.esc(e.url)}" rel="noopener">link</a>` : "";
+    return `<tr><td>${EQ.esc(e.org)}</td><td>${EQ.esc(e.role)}</td>` +
+      `<td>${EQ.statusBadge(e.status)}</td>` +
+      `<td>${EQ.esc(e.evidence)} ${url}</td></tr>`;
+  }).join("");
+
+  // FINRA-registered ledger
+  const reps = cov.reporters || [];
+  const statusSel = document.getElementById("repStatus");
+  const typeSel = document.getElementById("repType");
+  const statuses = [...new Set(reps.map(r => r.status))];
+  statusSel.innerHTML = '<option value="">All statuses</option>' +
+    statuses.map(s => `<option value="${EQ.esc(s)}">${EQ.esc(s.replace(/_/g, " "))} (${reps.filter(r => r.status === s).length})</option>`).join("");
+  const types = [...new Set(reps.map(r => r.type))].sort();
+  typeSel.innerHTML = '<option value="">All types</option>' +
+    types.map(t => `<option value="${EQ.esc(t)}">${EQ.esc(t)} (${reps.filter(r => r.type === t).length})</option>`).join("");
+
+  function renderLedger() {
+    const st = statusSel.value, ty = typeSel.value;
+    const q = document.getElementById("repFind").value.trim().toLowerCase();
+    const rows = reps.filter(r => (!st || r.status === st) && (!ty || r.type === ty) &&
+      (!q || r.name.toLowerCase().includes(q) || r.ric.toLowerCase() === q));
+    document.querySelector("#repTable tbody").innerHTML = rows.map(r => {
+      const detail = r.status === "live_amended"
+        ? `Amended-format August file read${r.file_published ? ` (published ${EQ.esc(r.file_published)})` : ""}. ${EQ.esc(r.note || "")}`
+        : EQ.esc(r.note || "");
+      return `<tr><td><a href="${EQ.esc(r.finra_url)}" rel="noopener">${EQ.esc(r.name)}</a></td>` +
+        `<td><code>${EQ.esc(r.ric)}</code></td>` +
+        `<td>${EQ.esc(r.type)}</td>` +
+        `<td>${EQ.statusBadge(r.status)}</td>` +
+        `<td>${detail}</td></tr>`;
+    }).join("") || `<tr><td colspan="5" class="muted">no firm matches</td></tr>`;
+    document.getElementById("repNote").textContent = `${rows.length} of ${reps.length} registered firms shown.`;
+  }
+  [statusSel, typeSel].forEach(el => el.addEventListener("change", renderLedger));
+  document.getElementById("repFind").addEventListener("input", renderLedger);
+  renderLedger();
+
+  document.querySelector("#probeTable tbody").innerHTML = (cov.probes || []).map(p =>
+    `<tr><td>${EQ.esc(p.label)}</td>` +
+    `<td style="text-align:left"><code>${EQ.esc(p.url)}</code></td>` +
+    `<td class="num">${EQ.esc(p.http_status || "—")}</td>` +
+    `<td class="num">${EQ.esc(p.checked_at || "")}</td></tr>`).join("");
+
+  const census = cov.census && cov.census.shared_host_public_s3_com;
+  const fh = cov.census && cov.census.firm_hosted;
+  if (census) {
+    document.getElementById("censusNote").textContent =
+      `Shared Download Site host (public.s3.com/rule605): ${census.directories_scanned} directories listed; ` +
+      `${census.directories_with_202608} contained an August-2026 file, covering ${census.reporters_with_202608_files} reporter codes.` +
+      (fh && fh.pages_read ? ` Firm-hosted Download Sites: ${fh.pages_read} registered pages read, ${fh.reporters_with_files} reporter codes with amended-format August files.` : "");
+  }
+})();
+</script>
+</body>
+</html>

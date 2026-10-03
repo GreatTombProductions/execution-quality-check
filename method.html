@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Method &amp; sources — Execution Quality Check</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site"><div class="inner">
+  <a class="brand" href="index.html">Execution Quality Check</a>
+  <nav>
+    <a href="index.html">Reporter comparison</a>
+    <a href="symbol.html">Symbol explorer</a>
+    <a href="coverage.html">Coverage</a>
+    <a href="method.html" class="active">Method &amp; sources</a>
+  </nav>
+</div></header>
+<div class="wrap">
+  <h1>Method &amp; sources</h1>
+
+  <h2>What this is</h2>
+  <p>
+    The amended SEC Rule 605 (compliance date 2026-08-01) requires market centers and large
+    broker-dealers to publish, monthly, machine-readable order-execution reports in a standardized
+    format: <strong>detailed reports</strong> as 55-field pipe-delimited files (Rule 605 NMS Plan,
+    Exhibit A) and <strong>summary reports</strong> following the SEC’s Order Execution Summary (OES)
+    CSV schema. The first reporting month is August 2026, due before the end of September 2026.
+    This tool downloads the published files, verifies their hashes, and presents them so reporters can
+    be compared — the comparability the standardized format exists to enable. It covers every
+    reporter whose August file could be located and read (<span id="nReporters">…</span>); the
+    <a href="coverage.html">Coverage</a> page lists who is in and who is not.
+  </p>
+
+  <h2>Sources and receipts</h2>
+  <p>Every file used is hash-receipted at download time. The receipts (with fetch timestamps and
+    SHA-256 digests) are below.</p>
+  <div class="card">
+    <details>
+      <summary><span id="receiptSummary">File receipts</span></summary>
+      <div class="tablewrap" style="margin-top:10px">
+        <table class="receipts" id="receiptsTable">
+          <thead><tr><th>File</th><th class="num">Bytes</th><th>SHA-256</th><th>Published / fetched (UTC)</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </details>
+    <p class="small muted" style="margin-bottom:0">
+      Raw files come from the hosts each reporter’s Rule 605 page links: the exchanges’ own sites
+      (Cboe’s CDN, IEX’s report archive, MIAX, MEMX, Nasdaq) and the shared Download Site host
+      <code>public.s3.com/rule605/</code>, which publishes for most broker-dealers plus NYSE and 24X.
+      A “published” time is the host’s Last-Modified header; a reporter may restate later (see
+      <a href="coverage.html">Coverage</a>).
+    </p>
+  </div>
+
+  <h2>Read the columns</h2>
+  <ul class="tight">
+    <li><strong>Price improvement rate</strong> — share of executed orders’ quantity that was
+      executed at a price better than the midpoint/quote, as published.</li>
+    <li><strong>Weighted avg price improvement</strong> — share-weighted average improvement amount
+      (as a fraction of midpoint).</li>
+    <li><strong>Executed at quote or better</strong> — share executed at the quote or better.</li>
+    <li><strong>Effective spread</strong> vs <strong>quoted spread</strong> — as a percentage of the
+      midpoint. Smaller effective spread relative to the quoted spread means less of the quoted
+      spread was paid.</li>
+    <li><strong>EFQ</strong> — the effective-to-quoted-spread ratio (effective ÷ quoted; 100% means
+      executions on average paid the full quoted spread).</li>
+    <li><strong>Realized spread (15s / 1 min)</strong> — effective spread relative to the midpoint
+      15 seconds / 1 minute after execution; a market-impact measure.</li>
+    <li><strong>Avg execution time</strong> — share-weighted average time from order receipt to
+      execution, in the time units as reported (milliseconds in the OES report layout).</li>
+  </ul>
+
+  <p class="small">
+    <strong>Executed shares</strong> throughout this tool means shares executed at the reporter
+    <em>plus</em> shares executed at other venues (detailed-file fields 12 and 13). The Rule 605 plan
+    defines price-improved shares and the spread averages over executions of covered orders generally,
+    not only the reporter’s own executions: in these filings price-improved shares never exceed that
+    total on any row, while for routing brokers they exceed their own executions alone by orders of
+    magnitude. Weighted statistics use the same total.
+  </p>
+
+  <h2>Documented normalizations and filters</h2>
+  <div class="card" id="normCard">
+    <ul class="tight" id="normList"></ul>
+  </div>
+
+  <h2>Known filing anomalies found during the build</h2>
+  <div class="card" id="dqCard">
+    <div id="dqList"></div>
+  </div>
+
+  <h2>Internal cross-checks</h2>
+  <div class="card">
+    <div class="tablewrap">
+      <table id="checksTable">
+        <thead><tr><th>Check</th><th>Result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-bottom:0">
+      These are build-time sanity checks of our own aggregation against the venues’ own published
+      aggregates; they document where the two surfaces agree or diverge.
+    </p>
+  </div>
+
+  <h2>Caveats</h2>
+  <ul class="tight">
+    <li>All statistics are <strong>self-published by the venues</strong> and are not audited or
+      verified by the SEC — this tool re-presents them, it does not bless them.</li>
+    <li>Reporters differ in market structure and computation methods; exchanges, wholesalers,
+      broker-dealers and trading systems are not apples-to-apples (each reporter’s own filings say as
+      much). Small reporters file few rows; a statistic from a handful of orders is not a ranking.</li>
+    <li>This is the <strong>first month</strong> of the standardized format. Early filings may be
+      corrected or restated (MIAX Pearl already restated its August file once); the tool documents
+      what was filed at build time.</li>
+    <li>Reporters’ covered orders <strong>overlap</strong>: a broker’s order that executes on an exchange
+      can appear in both reports, so volumes must not be summed across reporters or read as market
+      totals.</li>
+    <li>Per-symbol statistics are <strong>our</strong> share-weighted aggregates of the venues’
+      per-symbol rows (the venues publish no per-symbol aggregates) and exclude rows failing the
+      sanity filters above.</li>
+    <li>Informational only — not investment advice.</li>
+  </ul>
+
+  <footer class="site">
+    Built from public Rule 605 filings for August 2026. Receipts and build artifacts are retained
+    with the source repository.
+  </footer>
+</div>
+<script src="common.js"></script>
+<script>
+(async () => {
+  const [meta, validation] = await Promise.all([
+    EQ.loadJSON("data/meta.json"),
+    EQ.loadJSON("data/validation.json"),
+  ]);
+
+  document.getElementById("nReporters").textContent =
+    `${meta.counts.venues} reporters, ${EQ.num(meta.counts.detailed_rows)} detailed rows`;
+
+  // Receipts
+  const recs = (meta.receipts && meta.receipts.files) || [];
+  document.getElementById("receiptSummary").textContent = `File receipts (${recs.length} files, SHA-256)`;
+  document.querySelector("#receiptsTable tbody").innerHTML = recs.map(f =>
+    `<tr><td>${EQ.esc(f.ric)} ${EQ.esc(f.kind)}</td>` +
+    `<td class="num">${EQ.num(f.bytes)}</td>` +
+    `<td><code>${EQ.esc((f.sha256 || "").slice(0, 24))}…</code></td>` +
+    `<td class="num">${EQ.esc(f.last_modified || f.fetched_at || "")}</td></tr>`).join("");
+
+  // Normalizations and filters
+  const norm = [];
+  const efq = validation.checks.find(c => c.check === "efq_normalization");
+  if (efq) {
+    const scan = efq.convention_scan || [];
+    const pp = scan.filter(v => v.convention === "percent_points");
+    const frac = scan.filter(v => v.convention === "fraction");
+    const none = scan.filter(v => v.convention === "unverifiable");
+    const bad = scan.filter(v => v.summary_agrees === false);
+    const odd = scan.filter(v => v.row_ratio_median != null && !((v.row_ratio_median >= 0.8 && v.row_ratio_median <= 1.25) || (v.row_ratio_median >= 80 && v.row_ratio_median <= 125)));
+    norm.push(`<li><strong>EFQ units, checked per reporter:</strong> the schema writes the EFQ column as a
+      fraction (0.314), but a reporter may write percent-points (31.4). Each reporter’s unit is detected from
+      its own filed rows: within a row, EFQ should equal that row’s average effective spread ÷ average quoted
+      spread (the two dollar-spread columns), so the median of EFQ ÷ (effective ÷ quoted) is ≈ 1 for fractions
+      and ≈ 100 for percent-points. The verdict is then cross-checked against the summary file where one
+      exists. Result: ${frac.length} reporters file fractions (used as filed);
+      ${pp.length} file percent-points (${pp.map(v => EQ.esc(v.venue)).join(", ")}; normalized ÷100);
+      ${none.length} could not be verified (nil or near-empty reports: ${none.map(v => EQ.esc(v.venue)).join(", ")}),
+      used as filed${bad.length ? `; <strong>${bad.length} detection/summary disagreements: ` +
+      bad.map(v => EQ.esc(v.venue)).join(", ") + `</strong>` : "; no detection/summary disagreements"}.
+      ${odd.length ? `Row-level ratio outside 0.8–1.25 (a different way of averaging, not a different unit; not rescaled): ` +
+      odd.map(v => `${EQ.esc(v.venue)} ${v.row_ratio_median}`).join(", ") + `.` : ""}</li>`);
+  }
+  const dqCheck = validation.checks.find(c => c.check === "data_quality_findings");
+  if (dqCheck) {
+    const ex = (dqCheck.stat_suspect_exclusions || []).filter(e => e.rows > 0);
+    ex.sort((a, b) => b.share_of_executed_volume - a.share_of_executed_volume);
+    const big = ex.filter(e => e.share_of_executed_volume >= 0.005);
+    norm.push(`<li><strong>Sanity filters (weighted statistics only):</strong> rows with
+      |effective spread| &gt; 100% of midpoint, EFQ beyond ±1000%, or quoted spread wider than the
+      midpoint itself are excluded from the share-weighted statistics; quantity sums keep all rows.
+      ${ex.length} of ${(dqCheck.stat_suspect_exclusions || []).length} reporters had any such rows.
+      Reporters with exclusions of at least 0.5% of executed volume:
+      ${big.length ? big.map(e => `${EQ.esc(e.venue)} ${(e.share_of_executed_volume * 100).toFixed(2)}%`).join(", ") : "none"}.</li>`);
+    norm.push(`<li><strong>Notional values excluded:</strong> the detailed files’ notional column
+      (CvrdOrderSize) is not used anywhere in this tool — see the anomaly finding below.</li>`);
+  }
+  document.getElementById("normList").innerHTML = norm.join("");
+
+  // Data-quality findings
+  if (dqCheck) {
+    const parts = [];
+    parts.push(`<p>${EQ.esc(dqCheck.note)}</p>`);
+    const all = dqCheck.findings || [];
+    const hit = all.filter(x => x.share >= 0.01);
+    parts.push(`<p class="small"><strong>Sentinel-share (market-order round lots in the boundary buckets):</strong>
+      ${all.length} reporters had checkable rows; ${hit.length} had a sentinel share of 1% or more: ` +
+      (hit.length ? hit.map(x => `${EQ.esc(x.venue)} ${(x.share * 100).toFixed(1)}% of ${EQ.num(x.rows_checked)} rows`).join(" · ") : "none") +
+      `.</p>`);
+    const integ2 = validation.checks.find(c => c.check === "file_integrity");
+    if (integ2) {
+      const tot = integ2.venues.reduce((a, v) => a + v.rows, 0);
+      const bad = integ2.venues.reduce((a, v) => a + (v.rows_executed_exceeds_covered_qty || 0), 0);
+      const top = integ2.venues.filter(v => v.rows_executed_exceeds_covered_qty > 0)
+        .sort((a, b) => b.rows_executed_exceeds_covered_qty - a.rows_executed_exceeds_covered_qty).slice(0, 5)
+        .map(v => `${EQ.esc(v.venue)} ${EQ.num(v.rows_executed_exceeds_covered_qty)}`).join(", ");
+      parts.push(`<p class="small"><strong>Executed shares above covered shares:</strong> ${EQ.num(bad)} of
+        ${EQ.num(tot)} detailed rows report executed shares (own + away) more than 0.1% above the row’s
+        covered shares${top ? ` (largest counts: ${top})` : ""}. Kept as filed; they are not excluded from sums.</p>`);
+    }
+    parts.push(`<p class="small muted">These are properties of the filings themselves, recorded so
+      readers can weigh them. If reporters restate, later builds will reflect it.</p>`);
+    document.getElementById("dqList").innerHTML = parts.join("");
+  }
+
+  // Cross-checks table (aggregated over reporters)
+  const rows = [];
+  const fam = validation.checks.filter(c => c.check === "family_mapping");
+  const agg = {};
+  for (const c of fam) {
+    for (const r of c.results) {
+      const key = `${r.summary_type} ↔ ${r.detailed_candidates}`;
+      const a = agg[key] || (agg[key] = { venues: 0, ok: 0, total: 0 });
+      let counted = 0;
+      for (const s of (r.by_size || [])) {
+        if (s.summary_avg_order_size == null || s.implied_avg_order_size == null) continue;
+        counted++;
+        a.total++;
+        if (Math.abs(s.implied_avg_order_size - s.summary_avg_order_size) / Math.max(s.summary_avg_order_size, 1e-9) < 0.05) a.ok++;
+      }
+      if (counted) a.venues++;
+    }
+  }
+  // Price-improvement share: the detailed files mix S&P 500 and other symbols, the summary splits them,
+  // so the implied share (price-improved / total executed shares, own + away) should land between the two
+  // published universes (±5 points). This is the check that exposed executed-away quantities.
+  let piOk = 0, piTotal = 0;
+  for (const c of fam) {
+    const r = c.results.find(x => x.summary_type === "M" && x.detailed_candidates === "MXXNN");
+    if (!r) continue;
+    for (const s of (r.by_size || [])) {
+      const a = s.summary_pct_exctd_pi, b = s.summary_pct_exctd_pi_sp500, m = s.pi_share_of_executed_shares;
+      if (a == null || b == null || m == null) continue;
+      piTotal++;
+      if (m >= Math.min(a, b) - 0.05 && m <= Math.max(a, b) + 0.05) piOk++;
+    }
+  }
+  if (piTotal) rows.push(["Price-improvement share (market orders): detailed-file implied vs published S&P 500 / other bracket",
+    `${piOk}/${piTotal} reporter-size cells within ±5 points of the published bracket`]);
+  for (const [key, a] of Object.entries(agg)) {
+    rows.push([`Summary ↔ detailed mapping ${key} (${a.venues} reporters)`,
+      `${a.ok}/${a.total} size buckets within 5% on avg order size`]);
+  }
+  if (efq) {
+    const sc = efq.convention_scan || [];
+    rows.push(["EFQ unit detection vs summary ratio",
+      `${sc.filter(v => v.summary_agrees === true).length} agree, ${sc.filter(v => v.summary_agrees === false).length} disagree, ` +
+      `${sc.filter(v => v.summary_agrees === null).length} not comparable`]);
+  }
+  const integ = validation.checks.find(c => c.check === "file_integrity");
+  if (integ) {
+    const other = integ.venues.filter(v => Object.keys(v.rows_with_other_ric || {}).length);
+    rows.push(["Reporter code inside each file matches the file’s registered code",
+      other.length ? `${other.length} files carry other codes: ${other.map(v => v.venue).join(", ")}` : `all ${integ.venues.length} files consistent`]);
+  }
+  document.querySelector("#checksTable tbody").innerHTML = rows.map(r =>
+    `<tr><td>${EQ.esc(r[0])}</td><td>${EQ.esc(r[1])}</td></tr>`).join("");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "Execution Quality Check",
+  "short_name": "execution-quality-check",
+  "slug": "execution-quality-check",
+  "description": "The first month of standardized SEC Rule 605 execution-quality reports (August 2026), made comparable: reporter-by-reporter spread, price-improvement and execution statistics for exchanges and broker-dealers, plus a per-symbol explorer and a coverage ledger of who has and has not published — exactly as filed, with hash receipts and documented data-quality notes.",
+  "url": "https://greattombproductions.github.io/execution-quality-check/",
+  "repo": "https://github.com/GreatTombProductions/execution-quality-check",
+  "github": "https://github.com/GreatTombProductions/execution-quality-check",
+  "data_source": "Amended-format SEC Rule 605 reports for August 2026 from the exchanges' own sites (Cboe, IEX, MIAX, MEMX, Nasdaq), the shared Download Site host that NYSE, 24X and most broker-dealers use, and firm-hosted Download Sites: detailed 55-field pipe-delimited files + OES summary CSVs, fetched with SHA-256 receipts",
+  "data_url": "https://www.cboe.com/markets/us/equities/regulation/605/bzx",
+  "records": "170 reporters; 17,771,475 detailed rows; 14,534 symbols; 4,180 published summary rows; 151 of 223 FINRA-registered firms in the build",
+  "detail": "Reporter comparison by order size band × stock universe × order type across the published statistics (price improvement, at-quote rate, effective/quoted spread, EFQ, realized spreads), sortable and filterable by reporter type; per-symbol explorer comparing every reporter that filed records for a stock; coverage ledger of every FINRA-registered reporter (in the build / registered with no file located / Download Site not retrieved) with probe evidence; method page with file receipts, per-reporter unit checks, sanity filters and filing anomalies found during the build.",
+  "asymmetry": "Brokers and venues benefit when execution quality stays fragmented across hundreds of separate monthly downloads; the standardized format exists so executions can be compared, but nobody has assembled the comparison. Investors comparing venues — or checking whether their fills are measurably worse than the market's — need the portage layer: many Download Sites → searchable, comparable tables.",
+  "pipeline_note": "Header-driven parsing of the 55-field detailed files, parallel per reporter; executed shares = executed at the reporter + executed away (price-improvement share checked against the published S&P 500/other bracket: 870/870 reporter-size cells); EFQ units detected per reporter from the filed rows and cross-checked against the summary (6 reporters write percent-points and are normalized); headerless, gz, nested-zip and alias-code filings handled and recorded; conservative row-sanity filters for weighted statistics only (exclusions counted per reporter); notional fields excluded due to sentinel-value anomalies; nil, IOC-only and summary-less reporters kept and labeled; 256-way symbol shards by a Python/JS FNV-1a pair with an all-symbols parity test; 2026-10-04 post-deadline harvest build, Playwright browser smoke over the staged site; static, no backend.",
+  "search_modes": [
+    "reporter comparison",
+    "symbol lookup",
+    "coverage ledger"
+  ],
+  "released_date": "2026-09-22",
+  "status": "released",
+  "deploy_branch": "gh-pages",
+  "deploy_method": "static",
+  "feedback_categories": [
+    "data",
+    "source-drift",
+    "methodology",
+    "bug"
+  ],
+  "last_refreshed": "2026-10-04"
+}
