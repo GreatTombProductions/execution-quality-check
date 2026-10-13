@@ -5,27 +5,48 @@ import sys
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parents[1]
-GEN = PROJECT / "data" / "generated"
 sys.path.insert(0, str(PROJECT / "pipeline"))
 from build import shard_id  # noqa: E402
 
+# Floors are per published month. A later month adds its own entry; it does not
+# inherit August's counts.
+FLOORS = {
+    "202608": {
+        "venues": 100,
+        "symbols": 10000,
+        "detailed_rows": 10000000,
+        "summary_rows": 3000,
+        "reporters": 200,
+        "dirs": 70,
+    },
+}
+
+
+def generated_root():
+    """Source tree keeps data/generated/<month>/. The published tree serves data/<month>/."""
+    for candidate in (PROJECT / "data" / "generated" / "202608", PROJECT / "data" / "202608"):
+        if (candidate / "meta.json").exists():
+            return candidate
+    return PROJECT / "data" / "generated" / "202608"
+
 
 def load(name):
-    return json.loads((GEN / name).read_text())
+    return json.loads((generated_root() / name).read_text())
 
 
 def test_meta_contract():
     meta = load("meta.json")
-    assert meta["month"] == "202608"
+    assert meta["month"] in FLOORS
+    floor = FLOORS[meta["month"]]
     n_venues = len(meta["venues"])
-    assert n_venues >= 100
+    assert n_venues >= floor["venues"]
     assert meta["counts"]["venues"] == n_venues
     assert len({v["ric"] for v in meta["venues"]}) == n_venues     # reporter codes are unique
     assert [v["idx"] for v in meta["venues"]] == list(range(n_venues))
     assert len(meta["sizes"]) == 8
     assert meta["summary_stat_fields"][0] == "AvgOrderQty"
-    assert meta["counts"]["symbols"] > 10000
-    assert meta["counts"]["detailed_rows"] > 10000000
+    assert meta["counts"]["symbols"] > floor["symbols"]
+    assert meta["counts"]["detailed_rows"] > floor["detailed_rows"]
     for v in meta["venues"]:
         assert v["kind"] in ("exchange", "broker-dealer", "otc-market-maker", "ats",
                              "single-dealer-system", "exchange-market-maker", "other")
@@ -41,7 +62,7 @@ def test_summary_contract():
     n_venues = len(meta["venues"])
     d = load("summary.json")
     rows = d["rows"]
-    assert len(rows) >= 3000
+    assert len(rows) >= FLOORS[meta["month"]]["summary_rows"]
     for r in rows:
         assert len(r) == 4 + 12 + 1          # venue, sp500, size, type + 12 stats + flags
         assert 0 <= r[0] < n_venues
@@ -97,7 +118,7 @@ def test_coverage_contract():
     assert "live_amended" in statuses
     assert d["month"] == "202608"
     reps = d["reporters"]
-    assert len(reps) >= 200                                  # FINRA-registered reporters
+    assert len(reps) >= FLOORS[meta["month"]]["reporters"]   # FINRA-registered reporters
     assert len({r["ric"] for r in reps}) == len(reps)
     assert sum(d["reporter_counts"].values()) == len(reps)
     live_rics = {v["ric"] for v in meta["venues"]}
@@ -109,7 +130,7 @@ def test_coverage_contract():
         if r["status"] != "live_amended":
             assert r["note"]                                 # every gap says what was (not) checked
     census = d["census"]["shared_host_public_s3_com"]
-    assert census["directories_with_202608"] >= 70
+    assert census[f"directories_with_{meta['month']}"] >= FLOORS[meta["month"]]["dirs"]
 
 
 def test_validation_contract():

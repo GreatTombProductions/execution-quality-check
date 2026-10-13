@@ -1,6 +1,6 @@
 # Execution Quality Check
 
-**August 2026 is the first month of the amended SEC Rule 605 regime**: covered market
+**August 2026 is the first published month of the amended SEC Rule 605 regime**: covered market
 centers and large brokers must publish standardized, machine-readable monthly reports on
 the quality of their order executions — effective and quoted spreads, price improvement, fill
 behavior — for every NMS stock, in every order-size band.
@@ -32,9 +32,8 @@ receipts and the data-quality notes attached.
 
 ## Data
 
-170 reporters, 17.8M detailed rows. Sources for the build in `data/raw/202608/` (downloaded
-via `pipeline/fetch.py` for exchange hosts, `pipeline/harvest_s3.py` for the shared host and
-`pipeline/harvest_firms.py` for firm-hosted Download Sites):
+170 reporters, 17.8M detailed rows for August 2026 (the month this site publishes; later
+months are added after their filing deadline, each with its own coverage ledger). Sources:
 
 | Source | Reporters | Notes |
 |---|---|---|
@@ -43,10 +42,10 @@ via `pipeline/fetch.py` for exchange hosts, `pipeline/harvest_s3.py` for the sha
 | MIAX | MIAX Pearl | amended format replaced the legacy file on 2026-09-29 |
 | MEMX report API | MEMX | one zip per month |
 | Nasdaq | Nasdaq, PSX, and one report filed at the NTX path | one zip each |
-| Shared Download Site host (`public.s3.com/rule605/`) | NYSE group (5), 24X, 105 broker-dealers / market makers / ATSs / trading systems | `<code>YYYYMM.zip` + `.csv` + `.pdf` per reporter code |
+| Shared Download Site host (https://public.s3.com/rule605/) | NYSE group (5), 24X, 105 broker-dealers / market makers / ATSs / trading systems | `<code>YYYYMM.zip` + `.csv` + `.pdf` per reporter code |
 | Firm-hosted Download Sites (the URL each firm registered with FINRA) | 49 further reporter codes | zips, nested zips, gz and plain-text files; vendor portals; found by reading each registered page |
 
-Properties of the first filings (documented in `data/generated/validation.json` and on the
+Properties of the first filings (documented in `data/202608/validation.json` and on the
 method page):
 
 - **Executed shares = executed at the reporter + executed away.** Routing brokers execute almost
@@ -88,17 +87,13 @@ tests/                   Python tests (aggregation, data contract, shard parity,
 
 Rebuild (fetches if raw files are missing, then aggregates):
 
+The published site is this repository. Rebuild commands that download the filings live with
+the source checkout; the checks below run here, with no download:
+
 ```bash
-python3 pipeline/fetch.py          # exchange hosts; only needed when data/raw/<month> is absent
-python3 pipeline/harvest_s3.py     # shared host (most broker-dealers, NYSE, 24X)
-python3 pipeline/harvest_firms.py  # firm-hosted Download Sites (reads data/raw/<month>/finra-crawl.json)
-python3 pipeline/finra_sweep.py    # refresh the registered-firm ledger
-python3 pipeline/build.py
-python3 -m pytest tests/test_aggregate.py tests/test_data_contract.py -q
+python3 -m pytest tests/test_aggregate.py tests/test_data_contract.py tests/test_reporters.py tests/test_shard_parity.py -q
 python3 tests/run_browser_smoke.py
 ```
-
-`deploy.sh` runs all of the above and publishes `frontend/` + `data/generated/` to GitHub Pages.
 
 ## Notes
 

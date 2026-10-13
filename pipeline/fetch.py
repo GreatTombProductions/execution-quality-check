@@ -17,7 +17,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
-from reporters import LIVE, MONTH  # noqa: E402
+import reporters  # noqa: E402
+reporters.activate(reporters.month_from_argv())
+LIVE = reporters.LIVE
+MONTH = reporters.MONTH
 
 RAW_DIR = PROJECT_DIR / "data" / "raw" / MONTH
 
@@ -85,7 +88,7 @@ def probe_get_status(url, timeout=40):
     return {"url": url, "http_status": code or None, "checked_at": now_iso()}
 
 
-COVERAGE_PROBES = [
+_COVERAGE_PROBES_AUGUST = [
     # (label, list of urls) — coverage evidence from the exchange surfaces that are NOT on the
     # shared host. Absence signals: a direct 404, or NasdaqTrader's 302 -> /Trader.aspx?id=http404
     # (its not-found convention) — a bare 302 must not read as a reachable file.
@@ -106,6 +109,28 @@ COVERAGE_PROBES = [
     ("Shared host root (reporter directories)", ["https://public.s3.com/rule605/"]),
     ("FINRA Rule 605 Link Site", ["https://www.finra.org/filing-reporting/regulation-nms/sec-rule-605-reports"]),
 ]
+
+
+def coverage_probes(month):
+    """August returns the literal probe list. Any other month rewrites the month
+    token and resolves MEMX's report id from that month's probe file. A missing
+    MEMX id drops that one probe — it does not reuse August's id 40."""
+    if month == "202608":
+        return list(_COVERAGE_PROBES_AUGUST)
+    out = []
+    for label, urls in _COVERAGE_PROBES_AUGUST:
+        new_urls = []
+        for url in urls:
+            if url.rstrip("/").endswith("/report/605/40"):
+                alt = reporters._memx_url(month)
+                if alt:
+                    new_urls.append(alt)
+                continue
+            new_urls.append(url.replace("202608", month))
+        if not new_urls:
+            continue
+        out.append((label.replace("202608", month), new_urls))
+    return out
 
 
 def main():
@@ -188,7 +213,7 @@ def main():
 
     # ---- Coverage probes -------------------------------------------------
     probes = []
-    for label, urls in COVERAGE_PROBES:
+    for label, urls in coverage_probes(MONTH):
         for u in urls:
             p = probe_head(u)
             p["label"] = label

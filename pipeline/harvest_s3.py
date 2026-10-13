@@ -20,7 +20,9 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from reporters import MONTH  # noqa: E402
+import reporters  # noqa: E402
+reporters.activate(reporters.month_from_argv())
+MONTH = reporters.MONTH
 
 RAW_DIR = PROJECT_DIR / "data" / "raw" / MONTH
 HOST = "https://public.s3.com/rule605/"
@@ -89,16 +91,17 @@ def main():
     for d in dirs:
         files = list_dir(d)
         hits = [f for f in files if f"{MONTH}." in f]
-        census[d] = {"n_files": len(files), "files_202608": hits}
+        census[d] = {"n_files": len(files), f"files_{MONTH}": hits, "month_files": hits}
         for f in hits:
             m = re.fullmatch(rf"([A-Za-z0-9]+){MONTH}\.(zip|csv)", f)
             if m:
                 jobs.append((d, m.group(1), "detailed" if m.group(2) == "zip" else "summary", f))
-    print(f"[harvest] {len(dirs)} dirs, {sum(1 for c in census.values() if c['files_202608'])} with {MONTH}, {len(jobs)} files")
+    print(f"[harvest] {len(dirs)} dirs, {sum(1 for c in census.values() if c.get(f'files_{MONTH}'))} with {MONTH}, {len(jobs)} files")
     with cf.ThreadPoolExecutor(4) as ex:
         recs = list(ex.map(fetch_one, jobs))
     bad = [r for r in recs if not r["ok"]]
     out = {"month": MONTH, "harvested_at": now_iso(), "host": HOST, "census": census, "files": recs}
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
     (RAW_DIR / "harvest-receipts.json").write_text(json.dumps(out, indent=1) + "\n")
     print(f"[harvest] ok {len(recs) - len(bad)}/{len(recs)}; failures: {[(r['ric'], r['kind'], r['http_status']) for r in bad]}")
     return 1 if bad else 0

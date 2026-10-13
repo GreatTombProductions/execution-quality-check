@@ -12,6 +12,7 @@ Outputs (data/generated/):
 
 from __future__ import annotations
 
+import argparse
 import concurrent.futures as cf
 import io
 import json
@@ -30,12 +31,15 @@ from aggregate import (  # noqa: E402
     Group, iter_detailed, parse_summary, pack_all_row, pack_size_row,
     row_stat_suspect, SUM_FIELDS, SUMMARY_STAT_FIELDS,
 )
+import reporters  # noqa: E402
 from reporters import (  # noqa: E402
     COVERAGE, LIVE, MONTH, MONTH_LABEL, ORDER_SIZES, ORDER_TYPES_SUMMARY, PARTICIPANT_NAMES, _nice_name,
 )
 
 RAW_DIR = PROJECT_DIR / "data" / "raw" / MONTH
-GEN_DIR = PROJECT_DIR / "data" / "generated"
+GEN_DIR = PROJECT_DIR / "data" / "generated" / MONTH
+BUILT_AT = None
+GENERATED_AT = None
 
 
 def now_iso():
@@ -181,9 +185,9 @@ class VenueAgg:
         return self
 
 
-def run_detailed(rep):
+def run_detailed(rep, raw_dir):
     ric = rep["ric"]
-    zip_path = RAW_DIR / ric / "detailed.zip"
+    zip_path = Path(raw_dir) / ric / "detailed.zip"
     agg = VenueAgg(ric)
     efq = detect_efq_scale(zip_path)
     agg.efq_detection = efq
@@ -256,7 +260,82 @@ def load_receipts():
     return out
 
 
-def main():
+def _read_json_if(path):
+    if path is None or not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+def configure(month, restamp=False):
+    """Bind this process at one month. August keeps the stamps already published."""
+    global RAW_DIR, GEN_DIR, MONTH, MONTH_LABEL, LIVE, BUILT_AT, GENERATED_AT
+    reporters.activate(month)
+    MONTH = reporters.MONTH
+    MONTH_LABEL = reporters.MONTH_LABEL
+    LIVE = reporters.LIVE
+    RAW_DIR = PROJECT_DIR / "data" / "raw" / MONTH
+    GEN_DIR = PROJECT_DIR / "data" / "generated" / MONTH
+    if MONTH != "202608":
+        missing = [n for n in ("receipts.json", "harvest-receipts.json", "probes.json")
+                   if not (RAW_DIR / n).exists()]
+        if missing:
+            raise SystemExit(
+                f"refusing to build {MONTH}: missing {missing}. "
+                "A partial month is not a build, and August's files are not a substitute."
+            )
+    legacy = PROJECT_DIR / "data" / "generated"
+    prior_meta = _read_json_if(GEN_DIR / "meta.json")
+    if prior_meta is None and MONTH == "202608":
+        prior_meta = _read_json_if(legacy / "meta.json")
+    if prior_meta and prior_meta.get("month") != MONTH:
+        prior_meta = None
+    prior_val = _read_json_if(GEN_DIR / "validation.json")
+    if prior_val is None and MONTH == "202608":
+        prior_val = _read_json_if(legacy / "validation.json")
+    BUILT_AT = prior_meta["built_at"] if prior_meta and not restamp else now_iso()
+    GENERATED_AT = prior_val["generated_at"] if prior_val and not restamp else now_iso()
+
+
+def month_word():
+    """The word already baked into the August coverage notes. Later months use their own name."""
+    return "August" if MONTH == "202608" else MONTH_LABEL.split(" ")[0]
+
+
+def parse_args(argv):
+    p = argparse.ArgumentParser(description="Build one Rule 605 month")
+    p.add_argument("--month", default="202608")
+    p.add_argument("--publish", action="store_true",
+                   help="Mark this month published in months.json. August is always published. "
+                        "Any other month also needs receipts, probes, harvest and a FINRA sweep.")
+    p.add_argument("--restamp", action="store_true", help="Write a new built_at instead of reusing the published stamp")
+    return p.parse_args(argv)
+
+
+def write_months_index(publish):
+    """Published months only drive the picker. A month absent from a later ledger is not filled in."""
+    path = PROJECT_DIR / "data" / "generated" / "months.json"
+    prior = _read_json_if(path) or {"months": []}
+    already = next((m for m in prior.get("months", []) if m.get("id") == MONTH), None)
+    make_public = MONTH == "202608" or publish or bool(already and already.get("published"))
+    if make_public and MONTH != "202608":
+        missing = [n for n in ("receipts.json", "harvest-receipts.json", "probes.json", "finra-sweep.json")
+                   if not (RAW_DIR / n).exists()]
+        if missing:
+            raise SystemExit(f"refusing to publish {MONTH}: missing {missing}")
+    months = [m for m in prior.get("months", []) if m.get("id") != MONTH]
+    months.append({"id": MONTH, "label": MONTH_LABEL, "published": bool(make_public)})
+    months.sort(key=lambda m: m["id"])
+    published_ids = [m["id"] for m in months if m["published"]]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "default": published_ids[-1] if published_ids else None,
+        "months": months,
+    }, indent=2) + "\n")
+
+
+def main(argv=None):
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    configure(args.month, restamp=args.restamp)
     GEN_DIR.mkdir(parents=True, exist_ok=True)
     receipts = load_receipts()
 
@@ -266,7 +345,7 @@ def main():
     workers = max(2, min(12, (os.cpu_count() or 4) - 2))
     print(f"[build] {len(LIVE)} reporters, {workers} workers")
     with cf.ProcessPoolExecutor(max_workers=workers) as ex:
-        futs = {ex.submit(run_detailed, rep): rep["ric"] for rep in order}
+        futs = {ex.submit(run_detailed, rep, str(RAW_DIR)): rep["ric"] for rep in order}
         for fut in cf.as_completed(futs):
             venue_aggs[futs[fut]] = fut.result()
 
@@ -420,7 +499,7 @@ def main():
     meta = {
         "month": MONTH,
         "month_label": MONTH_LABEL,
-        "built_at": now_iso(),
+        "built_at": BUILT_AT,
         "venues": venue_meta,
         "sizes": [[code, label] for code, label in ORDER_SIZES],
         "summary_types": [[code, label] for code, label in ORDER_TYPES_SUMMARY],
@@ -457,8 +536,52 @@ def main():
     # ---- coverage ---------------------------------------------------------
     write_json(GEN_DIR / "coverage.json", build_coverage(venue_meta, venue_aggs))
 
+    write_months_index(args.publish)
     print("[build] done")
     return 0
+
+
+def _exchange_entries_from_files(venue_meta):
+    """Exchange-group ledger for a month that is not August.
+
+    August's COVERAGE prose is an August artifact. Later months get one row per
+    curated exchange that actually has files in this build, plus one row per
+    curated exchange that does not. No sentence is copied forward.
+    """
+    by_org = {}
+    for rep in LIVE:
+        if rep.get("harvested"):
+            continue
+        by_org.setdefault(rep["org"], []).append(rep)
+    live = {v["ric"]: v for v in venue_meta}
+    entries = []
+    for org, reps in by_org.items():
+        present = [r for r in reps if r["ric"] in live]
+        missing = [r["ric"] for r in reps if r["ric"] not in live]
+        if present and not missing:
+            status = "live_amended"
+            evidence = (
+                f"{len(present)} amended-format {MONTH_LABEL} file group(s) for {org} "
+                f"({', '.join(r['ric'] for r in present)}) are in this build. "
+                "Units and layout were detected from these files, not inherited from August."
+            )
+        elif present:
+            status = "live_amended"
+            evidence = (
+                f"In this build for {MONTH_LABEL}: {', '.join(r['ric'] for r in present)}. "
+                f"No file for: {', '.join(missing)}."
+            )
+        else:
+            status = "registered_only"
+            evidence = f"No {MONTH_LABEL} file for {org} ({', '.join(missing)}) was in this month's inputs."
+        entries.append({
+            "org": org,
+            "role": "Exchange",
+            "status": status,
+            "evidence": evidence,
+            "url": reps[0].get("link_site"),
+        })
+    return entries
 
 
 def build_coverage(venue_meta, venue_aggs):
@@ -507,7 +630,7 @@ def build_coverage(venue_meta, venue_aggs):
             codes = set(venue_aggs[v["ric"]].type_codes)
             ioc_only = bool(codes) and all(len(c) == 5 and c[3] == "Y" for c in codes)
             if v["nil_report"]:
-                entry["note"] = "Nil report: the August file carries a header and no covered-order rows."
+                entry["note"] = f"Nil report: the {month_word()} file carries a header and no covered-order rows."
             elif not v["summary_rows"]:
                 if ioc_only:
                     entry["note"] = ("Detailed file carries IOC order types only; the OES summary is empty by schema "
@@ -531,13 +654,21 @@ def build_coverage(venue_meta, venue_aggs):
         else:
             entry["status"] = sw.get("status") or "registered_only"
             entry["note"] = sw.get("note", "")
+            if MONTH != "202608" and not entry["note"]:
+                entry["note"] = (
+                    f"No {MONTH_LABEL} file is in this month's harvest. "
+                    "That is not evidence the reporter failed to publish."
+                )
         reporters.append(entry)
 
     counts = {}
     for r in reporters:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
 
-    entries = list(COVERAGE)
+    if MONTH == "202608":
+        entries = list(COVERAGE)
+    else:
+        entries = _exchange_entries_from_files(venue_meta)
     n_firms = len(reporters)
     live_firms = counts.get("live_amended", 0)
     others = {k: v for k, v in counts.items() if k != "live_amended"}
@@ -545,7 +676,7 @@ def build_coverage(venue_meta, venue_aggs):
         "org": f"FINRA-registered reporters ({n_firms} firms)",
         "role": "FINRA is the designated participant; each firm registers a reporter code and a Download Site URL",
         "status": "live_amended" if live_firms else "registered_only",
-        "evidence": (f"{live_firms} of {n_firms} registered reporters have an amended-format August file on the "
+        "evidence": (f"{live_firms} of {n_firms} registered reporters have an amended-format {month_word()} file on the "
                      f"shared Download Site host and are in this build (including nil reports). The other "
                      f"{n_firms - live_firms} are listed below with what was and was not checked: "
                      + ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in sorted(others.items()))
@@ -554,7 +685,7 @@ def build_coverage(venue_meta, venue_aggs):
         "url": "https://www.finra.org/filing-reporting/regulation-nms/sec-rule-605-reports",
     })
     n_dirs = len(harvest["census"]) if harvest else 0
-    n_dirs_aug = sum(1 for c in harvest["census"].values() if c["files_202608"]) if harvest else 0
+    n_dirs_aug = sum(1 for c in harvest["census"].values() if c.get(f"files_{MONTH}")) if harvest else 0
     return {
         "checked_at": probes.get("checked_at"),
         "harvested_at": harvest.get("harvested_at") if harvest else None,
@@ -567,8 +698,8 @@ def build_coverage(venue_meta, venue_aggs):
         "census": {
             "shared_host_public_s3_com": {
                 "directories_scanned": n_dirs,
-                "directories_with_202608": n_dirs_aug,
-                "reporters_with_202608_files": len([1 for f in (harvest["files"] if harvest else []) if f["kind"] == "detailed"]),
+                f"directories_with_{MONTH}": n_dirs_aug,
+                f"reporters_with_{MONTH}_files": len([1 for f in (harvest["files"] if harvest else []) if f["kind"] == "detailed"]),
             },
             "firm_hosted": {
                 "pages_read": len(firm["pages"]) if firm else 0,
@@ -733,7 +864,7 @@ def run_validation(venue_aggs, summary_rows, venue_meta, summary_evidence):
         ],
     })
 
-    return {"generated_at": now_iso(), "checks": checks}
+    return {"generated_at": GENERATED_AT, "checks": checks}
 
 
 if __name__ == "__main__":

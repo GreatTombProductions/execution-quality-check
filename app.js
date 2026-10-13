@@ -1,9 +1,9 @@
 // Venue comparison page.
 (async () => {
   const [meta, summary, rollup] = await Promise.all([
-    EQ.loadJSON("data/meta.json"),
-    EQ.loadJSON("data/summary.json"),
-    EQ.loadJSON("data/rollup.json"),
+    EQ.loadMonth("meta.json"),
+    EQ.loadMonth("summary.json"),
+    EQ.loadMonth("rollup.json"),
   ]);
 
   const venues = meta.venues; // {idx, ric, name, short, ...}
@@ -100,7 +100,7 @@
       : `<tr><td colspan="${COLUMNS.length + 1}" class="muted">no reporter matches this combination</td></tr>`;
 
     document.getElementById("cmpNote").innerHTML =
-      `August 2026 · ${EQ.esc(sizeLabels[size] || size)} · ` +
+      `${EQ.esc(meta.month_label)} · ${EQ.esc(sizeLabels[size] || size)} · ` +
       (sp500 === "N" ? "non-S&P 500 stocks" : "S&P 500 stocks") + " · " +
       (type === "M" ? "market orders" : "marketable limit orders") +
       `. ${withData} reporter${withData === 1 ? "" : "s"} published a row for this combination` +

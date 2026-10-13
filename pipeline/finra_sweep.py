@@ -27,10 +27,18 @@ from urllib.parse import urlparse
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from reporters import LIVE, MONTH  # noqa: E402
+import reporters  # noqa: E402
+reporters.activate(reporters.month_from_argv())
+LIVE = reporters.LIVE
+MONTH = reporters.MONTH
+MONTH_LABEL = reporters.MONTH_LABEL
 
 RAW = PROJECT_DIR / "data" / "raw" / MONTH
-CRAWL = Path(sys.argv[1]) if len(sys.argv) > 1 else RAW / "finra-crawl.json"
+_POS = reporters.positionals()
+CRAWL = Path(_POS[0]) if _POS else RAW / "finra-crawl.json"
+_WHEN = "August" if MONTH == "202608" else MONTH_LABEL.split(" ")[0]
+_WHEN_LONG = "August 2026" if MONTH == "202608" else reporters.MONTH_LABEL
+_MENTION = reporters.month_mention_re(MONTH)
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
 
 
@@ -44,8 +52,10 @@ def probe(url):
     m = re.search(r"---STATUS:(\d+)$", r.stdout.strip())
     code = m.group(1) if m else "000"
     body = r.stdout[:m.start()] if m else r.stdout
-    hit = bool(re.search(r"202608|2026[-_/]08|august[\s_-]*2026|aug[\s_-]*2026", body, re.I))
-    return {"url": url, "http_status": code, "august_2026_mention": hit, "bytes": len(body), "checked_at": now()}
+    hit = bool(_MENTION.search(body))
+    # August sweeps stored this key. Later months use month_mention. Readers accept both.
+    key = "august_2026_mention" if MONTH == "202608" else "month_mention"
+    return {"url": url, "http_status": code, key: hit, "bytes": len(body), "checked_at": now()}
 
 
 def firm_page_status(pg, host):
@@ -67,21 +77,21 @@ def firm_page_status(pg, host):
         return {"status": "registered_only",
                 "note": f"Registered Download Site {host} links the same amended-format files already read from another "
                         f"registered page ({'; '.join(sorted({(f.get('why') or '').split(' already')[0] for f in kinds['duplicate']}))}); "
-                        f"no August file under this reporter code."}
+                        f"no {_WHEN} file under this reporter code."}
     if "legacy" in kinds:
         why = "; ".join(sorted({(f.get("why") or "") for f in kinds["legacy"]}))
         return {"status": "published_legacy",
-                "note": f"Registered Download Site {host} links an August file in a layout other than the amended "
+                "note": f"Registered Download Site {host} links an {_WHEN} file in a layout other than the amended "
                         f"55-field detailed format ({why}); not used."}
     if "pdf" in kinds and len(kinds) == 1:
         return {"status": "published_pdf_only",
-                "note": f"Registered Download Site {host} links August 2026 PDFs only — no machine-readable file."}
+                "note": f"Registered Download Site {host} links {_WHEN_LONG} PDFs only — no machine-readable file."}
     if not pg.get("candidates"):
         return {"status": "registered_only",
-                "note": f"Registered Download Site {host} answered HTTP 200; no link naming August 2026 (202608) "
+                "note": f"Registered Download Site {host} answered HTTP 200; no link naming {_WHEN_LONG} ({MONTH}) "
                         f"on the page (a page that builds its links in the browser would not show them here)."}
     return {"status": "surface_unresolved",
-            "note": f"Registered Download Site {host} links August files that could not be used "
+            "note": f"Registered Download Site {host} links {_WHEN} files that could not be used "
                     f"({', '.join(sorted(kinds))})."}
 
 
@@ -112,7 +122,7 @@ def main():
         if not c.get("ok"):
             rec["status"] = "surface_unresolved"
             rec["note"] = ("Registered with FINRA; the firm's Download Site URL was not retrieved (FINRA's Link Site "
-                           "rate-limited the per-firm sweep, so this firm's page was not reached). No August file "
+                           "rate-limited the per-firm sweep, so this firm's page was not reached). No " + _WHEN + " file "
                            "was found on the shared host under this reporter code.")
             continue
         host = urlparse(url or "").netloc
@@ -121,14 +131,14 @@ def main():
             d_ = m.group(1) if m else None
             c_ = census.get(d_, {})
             rec["status"] = "registered_only"
-            others = sorted({re.sub(rf"{MONTH}\..*$", "", f) for f in c_.get("files_202608", [])})
+            others = sorted({re.sub(rf"{MONTH}\..*$", "", f) for f in (c_.get(f"files_{MONTH}") or c_.get("month_files") or [])})
             rec["note"] = (f"Registered Download Site is shared-host directory '{d_}'; listing re-read "
-                           f"{harvest['harvested_at']}: {c_.get('n_files', 0)} files, none for August 2026 under this reporter code"
-                           + (f" (the directory does carry August files under other codes: {', '.join(others)})." if others else "."))
+                           f"{harvest['harvested_at']}: {c_.get('n_files', 0)} files, none for {_WHEN_LONG} under this reporter code"
+                           + (f" (the directory does carry {_WHEN} files under other codes: {', '.join(others)})." if others else "."))
         elif "vista-one-solutions" in host:
             rec["status"] = "surface_unresolved"
             rec["note"] = ("Registered Download Site is a Vista One report viewer (form-driven, no file listing); "
-                           "not machine-probed. No August file was found on the shared host under this reporter code.")
+                           f"not machine-probed. No {_WHEN} file was found on the shared host under this reporter code.")
         elif not url:
             rec["status"] = "surface_unresolved"
             rec["note"] = "No Current Report URL on the firm's FINRA page."
@@ -144,9 +154,9 @@ def main():
         ok = p["http_status"] == "200"
         rec["status"] = "registered_only" if ok else "surface_unresolved"
         rec["note"] = (f"Registered Download Site {urlparse(p['url']).netloc} answered HTTP {p['http_status']}; "
-                       + ("the page text mentions August 2026 / 202608 — not verified as an amended-format file, "
-                          "not used in this build." if p["august_2026_mention"] else
-                          "no August 2026 file link found in the page text.")
+                       + (f"the page text mentions {_WHEN_LONG} / {MONTH} — not verified as an amended-format file, "
+                          "not used in this build." if p.get("august_2026_mention", p.get("month_mention")) else
+                          f"no {_WHEN_LONG} file link found in the page text.")
                        if ok else
                        f"Registered Download Site {urlparse(p['url']).netloc} did not answer (HTTP {p['http_status']}).")
     (RAW / "finra-sweep.json").write_text(json.dumps(out, indent=1) + "\n")

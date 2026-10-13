@@ -28,7 +28,7 @@
     CSV schema. The first reporting month is August 2026, due before the end of September 2026.
     This tool downloads the published files, verifies their hashes, and presents them so reporters can
     be compared — the comparability the standardized format exists to enable. It covers every
-    reporter whose August file could be located and read (<span id="nReporters">…</span>); the
+    reporter whose <span data-month-label>selected month</span> file could be located and read (<span id="nReporters">…</span>); the
     <a href="coverage.html">Coverage</a> page lists who is in and who is not.
   </p>
 
@@ -125,7 +125,7 @@
   </ul>
 
   <footer class="site">
-    Built from public Rule 605 filings for August 2026. Receipts and build artifacts are retained
+    Built from public Rule 605 filings for <span data-month-label>the selected month</span>. Receipts and build artifacts are retained
     with the source repository.
   </footer>
 </div>
@@ -133,8 +133,8 @@
 <script>
 (async () => {
   const [meta, validation] = await Promise.all([
-    EQ.loadJSON("data/meta.json"),
-    EQ.loadJSON("data/validation.json"),
+    EQ.loadMonth("meta.json"),
+    EQ.loadMonth("validation.json"),
   ]);
 
   document.getElementById("nReporters").textContent =

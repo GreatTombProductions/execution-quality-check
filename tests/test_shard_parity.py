@@ -22,12 +22,21 @@ console.log(JSON.stringify(syms.map(s => EQ.shardId(s))));
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_shard_id_parity_all_symbols(tmp_path):
-    idx = json.loads((PROJECT / "data" / "generated" / "search_index.json").read_text())
+    index_path = next(
+        p for p in (
+            PROJECT / "data" / "generated" / "202608" / "search_index.json",
+            PROJECT / "data" / "202608" / "search_index.json",
+        ) if p.exists()
+    )
+    idx = json.loads(index_path.read_text())
     syms = [r[0] for r in idx["rows"]] + ["BRK.B", "A", "ZZZZ", "TEST-1"]
     (tmp_path / "syms.json").write_text(json.dumps(syms))
     (tmp_path / "run.js").write_text(JS)
+    common_js = next(
+        p for p in (PROJECT / "frontend" / "common.js", PROJECT / "common.js") if p.exists()
+    )
     out = subprocess.run(
-        ["node", str(tmp_path / "run.js"), str(PROJECT / "frontend" / "common.js"), str(tmp_path / "syms.json")],
+        ["node", str(tmp_path / "run.js"), str(common_js), str(tmp_path / "syms.json")],
         capture_output=True, text=True, check=True).stdout
     js_ids = json.loads(out)
     assert js_ids == [shard_id(s) for s in syms]

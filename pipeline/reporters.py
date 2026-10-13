@@ -15,16 +15,78 @@ directory data/reporter_directory.json. `COVERAGE` is the documented state of th
 the per-firm ledger for FINRA-registered reporters is computed in build.py.
 """
 
+import copy
 import html
 import json
+import re
+import sys
 from pathlib import Path
 
-MONTH = "202608"
+DEFAULT_MONTH = "202608"
+MONTH = DEFAULT_MONTH
 MONTH_LABEL = "August 2026"
 
 _PROJECT = Path(__file__).resolve().parent.parent
 _DIRECTORY_PATH = _PROJECT / "data" / "reporter_directory.json"
 _HARVEST_PATH = _PROJECT / "data" / "raw" / MONTH / "harvest-receipts.json"
+
+_MONTH_NAMES = ["January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"]
+
+
+def month_label(month):
+    if not re.fullmatch(r"20\d{4}", month or ""):
+        raise SystemExit(f"month must be YYYYMM, got {month!r}")
+    return f"{_MONTH_NAMES[int(month[4:]) - 1]} {month[:4]}"
+
+
+def month_from_argv(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--month" not in argv:
+        return DEFAULT_MONTH
+    i = argv.index("--month")
+    if i + 1 >= len(argv) or not re.fullmatch(r"20\d{4}", argv[i + 1]):
+        raise SystemExit("--month expects YYYYMM, e.g. 202608")
+    return argv[i + 1]
+
+
+def positionals(argv=None):
+    """Arguments that are not `--month YYYYMM`. Other flags stay, so a crawl path
+    passed beside `--month` is still the positional and `--month` is not a path."""
+    argv = list(sys.argv[1:] if argv is None else argv)
+    out = []
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--month":
+            i += 2
+            continue
+        out.append(argv[i])
+        i += 1
+    return out
+
+
+def month_mention_re(month):
+    """Body pattern for 'this reporting month'. August's pattern is the one the
+    first sweep used, built the same way rather than special-cased."""
+    month_label(month)
+    year, mm = month[:4], month[4:]
+    full = _MONTH_NAMES[int(mm) - 1].lower()
+    abbr = full[:3]
+    return re.compile(rf"{month}|{year}[-_/]{mm}|{full}[\s_-]*{year}|{abbr}[\s_-]*{year}", re.I)
+
+
+def _memx_url(month):
+    """MEMX report ids are per month. August's id is 40. Later months come from
+    data/raw/<month>/memx-report-id.txt written by the probe — never guessed."""
+    if month == "202608":
+        return "https://www.memxtrading.com/api/v1/report/605/40"
+    side = _PROJECT / "data" / "raw" / month / "memx-report-id.txt"
+    if not side.exists():
+        return None
+    rid = side.read_text().strip()
+    if not rid.isdigit():
+        raise SystemExit(f"memx report id {rid!r} is not numeric")
+    return f"https://www.memxtrading.com/api/v1/report/605/{rid}"
 
 # Designated Participant code -> label (from the files' DsgntParticipant column + the OES PDFs).
 PARTICIPANT_NAMES = {
@@ -38,7 +100,7 @@ PARTICIPANT_NAMES = {
 # efq_percent_points: Cboe writes AvgEFQPct in percent-points (31.4 = 31.4%) while the
 # OES spec writes fractions (0.314). Verified exactly x100 on both detailed + summary
 # surfaces for all four exchanges at build time; normalized to fractions in the pipeline.
-LIVE = [
+_EXCHANGES_AUGUST = [
     {
         "ric": "BATS",
         "name": "Cboe BZX Exchange",
@@ -266,7 +328,47 @@ def _load_harvested():
     return out
 
 
-LIVE = LIVE + _load_harvested()
+def _exchanges_for(month):
+    """August returns the literal registry (URLs and EFQ flags unchanged).
+    Any other month rewrites the month token in those URLs and drops the
+    August EFQ flag — units are re-detected per file. MEMX's report id is not
+    in the URL pattern; a missing id file omits MEMX rather than reusing 40."""
+    if month == "202608":
+        return copy.deepcopy(_EXCHANGES_AUGUST)
+    out = []
+    for rep in _EXCHANGES_AUGUST:
+        row = copy.deepcopy(rep)
+        row["efq_percent_points"] = False
+        if row["ric"] == "U":
+            url = _memx_url(month)
+            if url is None:
+                continue
+            row["detailed_url"] = url
+            row["summary_url"] = url
+        else:
+            row["detailed_url"] = row["detailed_url"].replace("202608", month)
+            row["summary_url"] = row["summary_url"].replace("202608", month)
+        out.append(row)
+    return out
+
+
+def activate(month=None):
+    """Point the registry at one reporting month. Harvested reporters come
+    only from that month's receipts — August's roster is not carried forward."""
+    global MONTH, MONTH_LABEL, LIVE, _HARVEST_PATH
+    month = month or DEFAULT_MONTH
+    month_label(month)  # validates
+    MONTH = month
+    MONTH_LABEL = month_label(month)
+    _HARVEST_PATH = _PROJECT / "data" / "raw" / MONTH / "harvest-receipts.json"
+    curated = _exchanges_for(month)
+    LIVE = curated
+    LIVE = curated + _load_harvested()
+    return LIVE
+
+
+LIVE = []
+activate(DEFAULT_MONTH)
 
 # --- Coverage: everything else the first month has (not) produced --------------------
 # status values:

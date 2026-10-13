@@ -17,7 +17,7 @@
   </nav>
 </div></header>
 <div class="wrap">
-  <h1>Who has published — August 2026</h1>
+  <h1>Who has published — <span data-month-label>the selected month</span></h1>
   <p class="lede" id="coverageLede"></p>
 
   <div class="card" id="countCard"></div>
@@ -77,10 +77,13 @@
 <script src="common.js"></script>
 <script>
 (async () => {
-  const cov = await EQ.loadJSON("data/coverage.json");
-  const meta = await EQ.loadJSON("data/meta.json");
+  const cov = await EQ.loadMonth("coverage.json");
+  const meta = await EQ.loadMonth("meta.json");
+  const dueNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const dueMonth = Number(cov.month.slice(4));
+  const dueYear = Number(cov.month.slice(0, 4)) + (dueMonth === 12 ? 1 : 0);
   document.getElementById("coverageLede").textContent =
-    `The amended Rule 605 reports for ${cov.month_label} were due before the end of September 2026. ` +
+    `The amended Rule 605 reports for ${cov.month_label} were due before the end of ${dueNames[dueMonth % 12]} ${dueYear}. ` +
     `This page records what this tool could and could not verify — a documented gap beats a silent one. ` +
     `Sweep run ${cov.harvested_at || cov.checked_at}.`;
 
@@ -121,7 +124,7 @@
       (!q || r.name.toLowerCase().includes(q) || r.ric.toLowerCase() === q));
     document.querySelector("#repTable tbody").innerHTML = rows.map(r => {
       const detail = r.status === "live_amended"
-        ? `Amended-format August file read${r.file_published ? ` (published ${EQ.esc(r.file_published)})` : ""}. ${EQ.esc(r.note || "")}`
+        ? `Amended-format ${EQ.esc(cov.month_label)} file read${r.file_published ? ` (published ${EQ.esc(r.file_published)})` : ""}. ${EQ.esc(r.note || "")}`
         : EQ.esc(r.note || "");
       return `<tr><td><a href="${EQ.esc(r.finra_url)}" rel="noopener">${EQ.esc(r.name)}</a></td>` +
         `<td><code>${EQ.esc(r.ric)}</code></td>` +
@@ -146,8 +149,8 @@
   if (census) {
     document.getElementById("censusNote").textContent =
       `Shared Download Site host (public.s3.com/rule605): ${census.directories_scanned} directories listed; ` +
-      `${census.directories_with_202608} contained an August-2026 file, covering ${census.reporters_with_202608_files} reporter codes.` +
-      (fh && fh.pages_read ? ` Firm-hosted Download Sites: ${fh.pages_read} registered pages read, ${fh.reporters_with_files} reporter codes with amended-format August files.` : "");
+      `${census["directories_with_" + cov.month]} contained a ${cov.month_label} file, covering ${census["reporters_with_" + cov.month + "_files"]} reporter codes.` +
+      (fh && fh.pages_read ? ` Firm-hosted Download Sites: ${fh.pages_read} registered pages read, ${fh.reporters_with_files} reporter codes with amended-format ${cov.month_label} files.` : "");
   }
 })();
 </script>

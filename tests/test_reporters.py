@@ -23,7 +23,11 @@ def test_percent_point_reporters_are_exactly_cboe():
 
 
 def test_harvest_roster_matches_receipts():
-    h = json.loads((PROJECT / "data" / "raw" / reporters.MONTH / "harvest-receipts.json").read_text())
+    path = PROJECT / "data" / "raw" / reporters.MONTH / "harvest-receipts.json"
+    if not path.exists():
+        import pytest
+        pytest.skip("harvest receipts live with the source build, not the published site")
+    h = json.loads(path.read_text())
     harvested = {f["ric"] for f in h["files"] if f["ok"]}
     live_h = {r["ric"] for r in reporters.LIVE if r.get("harvested")}
     curated = {r["ric"] for r in reporters.LIVE if not r.get("harvested")}

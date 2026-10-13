@@ -1,8 +1,8 @@
 // Symbol explorer: search index -> letter shard -> per-venue comparison.
 (async () => {
   const [meta, index] = await Promise.all([
-    EQ.loadJSON("data/meta.json"),
-    EQ.loadJSON("data/search_index.json"),
+    EQ.loadMonth("meta.json"),
+    EQ.loadMonth("search_index.json"),
   ]);
   const venues = meta.venues;
   const symRow = {};
@@ -16,7 +16,7 @@
 
   async function getShard(id) {
     if (!shardCache[id]) {
-      shardCache[id] = await EQ.loadJSON(`data/symbols/${id}.json`);
+      shardCache[id] = await EQ.loadMonth(`symbols/${id}.json`);
     }
     return shardCache[id];
   }
@@ -59,7 +59,7 @@
     detailEl.style.display = "";
 
     document.getElementById("symTitle").innerHTML =
-      `${EQ.esc(sym)} <span class="small muted">· August 2026</span>`;
+      `${EQ.esc(sym)} <span class="small muted">· ${EQ.esc(meta.month_label)}</span>`;
     const sizeSel = document.getElementById("sizeSel");
     sizeSel.innerHTML = "";
     const present = new Set();

@@ -11,9 +11,11 @@ const { chromium } = require('playwright');
   const browser = await chromium.launch({ headless: true });
   const errors = [];
   try {
-    // Venue count is data, not a constant: read it from the staged dataset so this
-    // smoke stays correct as publishers come online through the filing window.
-    const meta = await (await fetch(base + 'data/meta.json')).json();
+    // Venue count and the month are data, not constants. The picker default is the
+    // latest published month; an unpublished id must say so and must not fall through.
+    const months = await (await fetch(base + 'data/months.json')).json();
+    const month = months.default;
+    const meta = await (await fetch(base + `data/${month}/meta.json`)).json();
     const nVenues = meta.venues.length;
 
     const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
@@ -21,7 +23,7 @@ const { chromium } = require('playwright');
     page.on('pageerror', (e) => errors.push(e.message));
 
     // ---- comparison page ----
-    const summary = await (await fetch(base + 'data/summary.json')).json();
+    const summary = await (await fetch(base + `data/${month}/summary.json`)).json();
     const expectRows = (size, sp, type) =>
       summary.rows.filter(r => r[1] === sp && r[2] === size && r[3] === type).length;
     let response = await page.goto(base, { waitUntil: 'networkidle' });
@@ -58,8 +60,11 @@ const { chromium } = require('playwright');
     const exRows = await page.$$eval('#cmpTable tbody tr', trs => trs.length);
     assert(exRows >= 5 && exRows <= nExchange, `exchange filter gave ${exRows} rows of ${nExchange}`);
     await page.selectOption('#kindSel', '');
+    const hoodIdx = new Set(meta.venues.filter(v => /robinhood/i.test(v.name)).map(v => v.idx));
+    const nHood = summary.rows.filter(r => hoodIdx.has(r[0]) && r[1] === 'N' && r[2] === '1000' && r[3] === 'M').length;
+    assert(nHood >= 1, 'default band should contain a Robinhood reporter');
     await page.fill('#nameFilter', 'robinhood');
-    await page.waitForFunction(() => document.querySelectorAll('#cmpTable tbody tr').length === 2);
+    await page.waitForFunction((n) => document.querySelectorAll('#cmpTable tbody tr').length === n, nHood);
     assert((await page.$$eval('#cmpTable tbody tr', trs => trs.map(tr => tr.textContent).join(' '))).toLowerCase().includes('robinhood'),
       'name filter should find the Robinhood reporters');
     await page.fill('#nameFilter', '');
@@ -101,7 +106,7 @@ const { chromium } = require('playwright');
     assert(/\d+ reporters?/.test(await page.$eval('#results .row[data-sym]', r => r.textContent)), 'suggestion should show reporter count');
 
     // ---- coverage page ----
-    const cov = await (await fetch(base + 'data/coverage.json')).json();
+    const cov = await (await fetch(base + `data/${month}/coverage.json`)).json();
     response = await page.goto(base + 'coverage.html', { waitUntil: 'networkidle' });
     assert(response.ok(), `coverage page returned ${response.status()}`);
     await page.waitForFunction(() => document.querySelectorAll('#covTable tbody tr').length >= 9);
@@ -112,9 +117,10 @@ const { chromium } = require('playwright');
     await page.waitForFunction((n) => document.querySelectorAll('#repTable tbody tr').length === n,
       cov.reporters.filter(r => r.status === 'live_amended').length);
     await page.selectOption('#repStatus', '');
+    const nHoodLedger = cov.reporters.filter(r => /robinhood/i.test(r.name)).length;
+    assert(nHoodLedger >= 1, 'coverage ledger should name Robinhood');
     await page.fill('#repFind', 'robinhood');
-    await page.waitForFunction(() => document.querySelectorAll('#repTable tbody tr').length >= 1 &&
-      document.querySelectorAll('#repTable tbody tr').length <= 3);
+    await page.waitForFunction((n) => document.querySelectorAll('#repTable tbody tr').length === n, nHoodLedger);
     assert((await page.$$eval('#repTable tbody tr', trs => trs.map(tr => tr.textContent).join(' '))).includes('HOOD'), 'ledger should show Robinhood code');
 
     // ---- method page ----
@@ -126,6 +132,22 @@ const { chromium } = require('playwright');
     assert(norm.includes('EFQ'), 'normalization note missing');
 
     assert(errors.length === 0, `console errors: ${errors.join(' | ')}`);
+
+    // An unpublished month is an error, not a silent fall-through to the default.
+    const bad = await browser.newPage();
+    const badErrors = [];
+    bad.on('pageerror', (e) => badErrors.push(e.message));
+    response = await bad.goto(base + '?month=199901', { waitUntil: 'networkidle' });
+    assert(response.ok(), `unpublished-month page returned ${response.status()}`);
+    await bad.waitForSelector('#monthError');
+    const monthMsg = await bad.$eval('#monthError', (el) => el.textContent);
+    assert(monthMsg.includes('199901') && monthMsg.includes('not published'), monthMsg);
+    assert(!monthMsg.includes('undefined'), monthMsg);
+    const cmpRows = await bad.$$eval('#cmpTable tbody tr', (trs) => trs.length);
+    assert(cmpRows === 0, 'unpublished month must not render the default month table');
+    assert(badErrors.length === 0, `unpublished month raised: ${badErrors.join(' | ')}`);
+    await bad.close();
+
     console.log('[smoke] all checks passed');
   } finally {
     await browser.close();

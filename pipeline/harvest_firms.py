@@ -31,7 +31,9 @@ from urllib.parse import parse_qs, urljoin, urlparse
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from reporters import MONTH  # noqa: E402
+import reporters  # noqa: E402
+reporters.activate(reporters.month_from_argv())
+MONTH = reporters.MONTH
 
 RAW = PROJECT_DIR / "data" / "raw" / MONTH
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
@@ -39,8 +41,11 @@ UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chr
 # try each before recording a page as unreachable.
 UAS = ("curl/8.5.0", UA)
 SKIP_HOSTS = ("public.s3.com", "vista-one-solutions.com")
-# A link names the reporting month as 202608, 2026-08, a "aug...605" file name, or a year=2026&month=8 query.
-MONTH_RE = re.compile(rf"{MONTH}|{MONTH[:4]}[-_/]{MONTH[4:]}|aug(?:ust)?[-_]?(?:{MONTH[:4]})?[-_a-z]*605"
+# A link names the reporting month as 202608, 2026-08, a "<month>...605" file name, or a year=2026&month=8 query.
+# The name alternative is built from the month, and for August it is aug(?:ust)? — the first-harvest pattern.
+_full = reporters._MONTH_NAMES[int(MONTH[4:]) - 1].lower()
+_name = rf"{_full[:3]}(?:{_full[3:]})?" if len(_full) > 3 else _full[:3]
+MONTH_RE = re.compile(rf"{MONTH}|{MONTH[:4]}[-_/]{MONTH[4:]}|{_name}[-_]?(?:{MONTH[:4]})?[-_a-z]*605"
                       rf"|year={MONTH[:4]}&month=0?{int(MONTH[4:])}(?!\d)", re.I)
 EXTS = (".zip", ".csv", ".gz", ".txt", ".dat", ".pdf")
 REQUIRED = ("DsgntParticipant", "RprtEntityCd", "RptDate", "Symbol", "OrderSize", "OrderType")

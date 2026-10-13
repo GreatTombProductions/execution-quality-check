@@ -42,13 +42,80 @@ const EQ = (() => {
     return out.join("; ");
   }
 
+  let monthId = null;
+  let monthLabel = null;
+  let publishedMonths = [];
+
+  async function openMonth() {
+    if (monthId) return { id: monthId, label: monthLabel };
+    const idx = await loadJSON("data/months.json");
+    publishedMonths = (idx.months || []).filter(m => m.published);
+    const q = new URLSearchParams(location.search).get("month");
+    const known = publishedMonths.map(m => `${m.label} (${m.id})`).join(", ") || "none";
+    if (q && !publishedMonths.some(m => m.id === q)) {
+      const note = document.createElement("p");
+      note.className = "card";
+      note.id = "monthError";
+      note.textContent = `Month ${q} is not published. Published: ${known}.`;
+      (document.querySelector(".wrap") || document.body).prepend(note);
+      return new Promise(() => {});
+    }
+    const rec = publishedMonths.find(m => m.id === (q || idx.default));
+    if (!rec) {
+      const note = document.createElement("p");
+      note.className = "card";
+      note.id = "monthError";
+      note.textContent = `No published month. Published: ${known}.`;
+      (document.querySelector(".wrap") || document.body).prepend(note);
+      return new Promise(() => {});
+    }
+    monthId = rec.id;
+    monthLabel = rec.label;
+    const nav = document.querySelector("header.site nav");
+    if (nav && !document.getElementById("monthSel")) {
+      const sel = document.createElement("select");
+      sel.id = "monthSel";
+      sel.setAttribute("aria-label", "Reporting month");
+      for (const m of publishedMonths) {
+        const o = document.createElement("option");
+        o.value = m.id;
+        o.textContent = m.label;
+        if (m.id === monthId) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.addEventListener("change", () => {
+        const u = new URL(location.href);
+        u.searchParams.set("month", sel.value);
+        location.href = u.pathname.split("/").pop() + u.search;
+      });
+      nav.appendChild(sel);
+    }
+    document.querySelectorAll("header.site nav a").forEach(a => {
+      const u = new URL(a.getAttribute("href"), location.href);
+      u.searchParams.set("month", monthId);
+      a.setAttribute("href", (u.pathname.split("/").pop() || a.getAttribute("href")) + u.search);
+    });
+    document.querySelectorAll("[data-month-label]").forEach(el => { el.textContent = monthLabel; });
+    return rec;
+  }
+
+  async function loadMonth(name) {
+    await openMonth();
+    return loadJSON(`data/${monthId}/${name}`);
+  }
+
+  function monthFile(name) {
+    return `data/${monthId}/${name}`;
+  }
+
   function statusBadge(status) {
+    const when = monthLabel || "This month";
     const map = {
       live_amended: ["live", "Amended-format files live"],
-      published_legacy: ["legacy", "August file published — legacy format"],
-      published_pdf_only: ["legacy", "August file published — PDF only"],
-      legacy_only: ["legacy", "Legacy files only (no August file yet)"],
-      registered_only: ["registered", "Registered — no August file located"],
+      published_legacy: ["legacy", `${when} file published — legacy format`],
+      published_pdf_only: ["legacy", `${when} file published — PDF only`],
+      legacy_only: ["legacy", `Legacy files only (no ${when} file yet)`],
+      registered_only: ["registered", `Registered — no ${when} file located`],
       surface_unresolved: ["unresolved", "Reporting surface unresolved"],
     };
     const [cls, label] = map[status] || ["unresolved", status];
@@ -87,6 +154,6 @@ const EQ = (() => {
     });
   }
 
-  return { loadJSON, pct, num, bp, esc, flagText, statusBadge, kindLabel, KINDS, sortRows, shardId };
+  return { loadJSON, loadMonth, openMonth, monthFile, pct, num, bp, esc, flagText, statusBadge, kindLabel, KINDS, sortRows, shardId };
 
 })();
