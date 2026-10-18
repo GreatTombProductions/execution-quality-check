@@ -33,14 +33,14 @@
   </p>
 
   <h2>Sources and receipts</h2>
-  <p>Every file used is hash-receipted at download time. The receipts (with fetch timestamps and
-    SHA-256 digests) are below.</p>
+  <p>Every file used is hash-receipted. The receipts (host Last-Modified, the time this tool fetched
+    the file, and SHA-256) are below. <span id="filesAsOf"></span></p>
   <div class="card">
     <details>
       <summary><span id="receiptSummary">File receipts</span></summary>
       <div class="tablewrap" style="margin-top:10px">
         <table class="receipts" id="receiptsTable">
-          <thead><tr><th>File</th><th class="num">Bytes</th><th>SHA-256</th><th>Published / fetched (UTC)</th></tr></thead>
+          <thead><tr><th>File</th><th class="num">Bytes</th><th>SHA-256</th><th>Host Last-Modified</th><th>Fetched by this tool (UTC)</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -139,15 +139,23 @@
 
   document.getElementById("nReporters").textContent =
     `${meta.counts.venues} reporters, ${EQ.num(meta.counts.detailed_rows)} detailed rows`;
+  const asOf = document.getElementById("filesAsOf");
+  if (meta.files_as_of) {
+    const n = (meta.restated_rics || []).length;
+    asOf.textContent = `This page was checked against the hosts on ${meta.files_as_of} (UTC)` +
+      (n ? `, when ${n} reporter code${n === 1 ? "" : "s"} had replaced an August file (${(meta.restated_rics || []).join(", ")}).` : ".") +
+      ((meta.withdrawn || []).length ? ` Omitted because the host returned 404: ${(meta.withdrawn || []).map(g => g.ric).join(", ")}.` : "");
+  }
 
   // Receipts
   const recs = (meta.receipts && meta.receipts.files) || [];
   document.getElementById("receiptSummary").textContent = `File receipts (${recs.length} files, SHA-256)`;
   document.querySelector("#receiptsTable tbody").innerHTML = recs.map(f =>
-    `<tr><td>${EQ.esc(f.ric)} ${EQ.esc(f.kind)}</td>` +
+    `<tr><td>${EQ.esc(f.ric)} ${EQ.esc(f.kind)}${f.restated ? " (restated)" : ""}</td>` +
     `<td class="num">${EQ.num(f.bytes)}</td>` +
     `<td><code>${EQ.esc((f.sha256 || "").slice(0, 24))}…</code></td>` +
-    `<td class="num">${EQ.esc(f.last_modified || f.fetched_at || "")}</td></tr>`).join("");
+    `<td class="num">${EQ.esc(f.last_modified || "")}</td>` +
+    `<td class="num">${EQ.esc(f.fetched_at || "")}</td></tr>`).join("");
 
   // Normalizations and filters
   const norm = [];

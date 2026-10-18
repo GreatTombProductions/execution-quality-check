@@ -7,6 +7,20 @@
   ]);
 
   const venues = meta.venues; // {idx, ric, name, short, ...}
+  const asOf = document.getElementById("filesAsOf");
+  if (asOf && meta.files_as_of) {
+    const restated = meta.restated_rics || [];
+    const gone = meta.withdrawn || [];
+    const parts = [`Files as fetched on ${meta.files_as_of} (UTC).`];
+    if (restated.length) {
+      parts.push(`${restated.length} reporter code${restated.length === 1 ? "" : "s"} replaced an August file after the first harvest (${restated.join(", ")}). Those rows are the current file. The first-filed copy is kept with the source build and is not what this page shows.`);
+    }
+    if (gone.length) {
+      parts.push(`Not shown, because the host no longer serves the file: ${gone.map(g => `${g.name || g.ric} (${g.ric})`).join(", ")}.`);
+    }
+    asOf.hidden = false;
+    asOf.textContent = parts.join(" ");
+  }
   const statIdx = {};
   meta.summary_stat_fields.forEach((f, i) => { statIdx[f] = i; });
   const ROW_STAT_OFFSET = 4; // [venue, sp500, size, type, ...stats, flags]

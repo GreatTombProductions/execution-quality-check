@@ -223,6 +223,12 @@ def summary_efq_evidence(rows):
             "min": round(ratios[0], 3), "max": round(ratios[-1], 3)}
 
 
+def load_restatement_ledger():
+    """Optional. Written when a later fetch replaces first-filed bytes.
+    Absent on a month that has not been restated — the build still runs."""
+    return _read_json_if(RAW_DIR / "restatement-ledger.json") or {}
+
+
 def load_receipts():
     """Merge fetch.py receipts (exchange hosts) with harvest_s3.py receipts (shared host)."""
     base = read_json(RAW_DIR / "receipts.json")
@@ -233,22 +239,28 @@ def load_receipts():
         h = read_json(hp)
         out["harvested_at"] = h.get("harvested_at")
         for f in h["files"]:
-            files.append({
+            row = {
                 "ric": f["ric"], "kind": f["kind"], "url": f["url"], "ok": f["ok"],
                 "bytes": f.get("bytes"), "sha256": f.get("sha256"),
                 "last_modified": f.get("last_modified"), "fetched_at": f.get("fetched_at"),
-            })
+            }
+            if f.get("restated"):
+                row["restated"] = True
+            files.append(row)
     fp = RAW_DIR / "firm-harvest-receipts.json"
     if fp.exists():
         h = read_json(fp)
         out["firm_harvested_at"] = h.get("harvested_at")
         for f in h["files"]:
-            files.append({
+            row = {
                 "ric": f["ric"], "kind": f["kind"], "url": f.get("url"), "ok": f["ok"],
                 "bytes": f.get("bytes"), "sha256": f.get("sha256"),
                 "last_modified": f.get("last_modified"), "fetched_at": f.get("fetched_at"),
                 "note": f.get("note"),
-            })
+            }
+            if f.get("restated"):
+                row["restated"] = True
+            files.append(row)
     live = {r["ric"] for r in LIVE}
     seen, uniq = set(), []
     for f in files:                      # first source wins per (code, kind), matching the loader
@@ -496,6 +508,7 @@ def main(argv=None):
     write_json(GEN_DIR / "validation.json", validation)
 
     # ---- meta -------------------------------------------------------------
+    ledger = load_restatement_ledger()
     meta = {
         "month": MONTH,
         "month_label": MONTH_LABEL,
@@ -513,6 +526,9 @@ def main(argv=None):
             "reporters_with_summary_rows": sum(1 for v in venue_meta if v["summary_rows"]),
         },
         "receipts": receipts,
+        "files_as_of": ledger.get("files_as_of"),
+        "restated_rics": sorted({e["ric"] for e in ledger.get("replaced", [])}),
+        "withdrawn": ledger.get("withdrawn_reporters", []),
         "summary_flag_bits": {
             "1": "effective spread > 10% (as filed)",
             "2": "quoted spread > 10% (as filed)",
@@ -590,6 +606,9 @@ def build_coverage(venue_meta, venue_aggs):
     probes = read_json(RAW_DIR / "probes.json")
     directory = read_json(PROJECT_DIR / "data" / "reporter_directory.json")
     live_by_ric = {v["ric"]: v for v in venue_meta}
+    ledger = load_restatement_ledger()
+    restated = {e["ric"] for e in ledger.get("replaced", [])}
+    withdrawn_note = {e["ric"]: e.get("note", "") for e in ledger.get("withdrawn_reporters", [])}
     harvest = read_json(RAW_DIR / "harvest-receipts.json") if (RAW_DIR / "harvest-receipts.json").exists() else None
     sweep_path = RAW_DIR / "finra-sweep.json"
     sweep = read_json(sweep_path) if sweep_path.exists() else {}
@@ -651,10 +670,18 @@ def build_coverage(venue_meta, venue_aggs):
                 if v["ric"] != ric:
                     extra += f"; the file's own reporter code is {v['ric']}, not the registered {ric}"
                 entry["note"] = (entry["note"] + " " if entry["note"] else "") + extra + "."
+            if v["ric"] in restated or ric in restated:
+                when = ledger.get("files_as_of") or "a later check"
+                extra = (f"Restated after the first harvest. This page shows the file fetched on {when}, "
+                         "not the first-filed copy, which is kept with the source build.")
+                entry["note"] = (entry["note"] + " " if entry["note"] else "") + extra
         else:
             entry["status"] = sw.get("status") or "registered_only"
             entry["note"] = sw.get("note", "")
-            if MONTH != "202608" and not entry["note"]:
+            if ric in withdrawn_note:
+                entry["status"] = "registered_only"
+                entry["note"] = withdrawn_note[ric]
+            elif MONTH != "202608" and not entry["note"]:
                 entry["note"] = (
                     f"No {MONTH_LABEL} file is in this month's harvest. "
                     "That is not evidence the reporter failed to publish."
