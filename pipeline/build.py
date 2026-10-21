@@ -260,6 +260,8 @@ def load_receipts():
             }
             if f.get("restated"):
                 row["restated"] = True
+            if f.get("recoded_from"):
+                row["recoded_from"] = f["recoded_from"]
             files.append(row)
     live = {r["ric"] for r in LIVE}
     seen, uniq = set(), []
@@ -529,6 +531,8 @@ def main(argv=None):
         "files_as_of": ledger.get("files_as_of"),
         "restated_rics": sorted({e["ric"] for e in ledger.get("replaced", [])}),
         "withdrawn": ledger.get("withdrawn_reporters", []),
+        "recoded": [{k: e.get(k) for k in ("from_ric", "to_ric", "name", "observed_at", "note")}
+                    for e in ledger.get("recoded", [])],
         "summary_flag_bits": {
             "1": "effective spread > 10% (as filed)",
             "2": "quoted spread > 10% (as filed)",
@@ -609,6 +613,7 @@ def build_coverage(venue_meta, venue_aggs):
     ledger = load_restatement_ledger()
     restated = {e["ric"] for e in ledger.get("replaced", [])}
     withdrawn_note = {e["ric"]: e.get("note", "") for e in ledger.get("withdrawn_reporters", [])}
+    recoded_note = {e["to_ric"]: e.get("note", "") for e in ledger.get("recoded", [])}
     harvest = read_json(RAW_DIR / "harvest-receipts.json") if (RAW_DIR / "harvest-receipts.json").exists() else None
     sweep_path = RAW_DIR / "finra-sweep.json"
     sweep = read_json(sweep_path) if sweep_path.exists() else {}
@@ -675,6 +680,8 @@ def build_coverage(venue_meta, venue_aggs):
                 extra = (f"Restated after the first harvest. This page shows the file fetched on {when}, "
                          "not the first-filed copy, which is kept with the source build.")
                 entry["note"] = (entry["note"] + " " if entry["note"] else "") + extra
+            if v["ric"] in recoded_note:
+                entry["note"] = (entry["note"] + " " if entry["note"] else "") + recoded_note[v["ric"]]
         else:
             entry["status"] = sw.get("status") or "registered_only"
             entry["note"] = sw.get("note", "")

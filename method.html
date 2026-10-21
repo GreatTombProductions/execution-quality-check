@@ -144,14 +144,15 @@
     const n = (meta.restated_rics || []).length;
     asOf.textContent = `This page was checked against the hosts on ${meta.files_as_of} (UTC)` +
       (n ? `, when ${n} reporter code${n === 1 ? "" : "s"} had replaced an August file (${(meta.restated_rics || []).join(", ")}).` : ".") +
-      ((meta.withdrawn || []).length ? ` Omitted because the host returned 404: ${(meta.withdrawn || []).map(g => g.ric).join(", ")}.` : "");
+      ((meta.withdrawn || []).length ? ` Omitted because the host returned 404: ${(meta.withdrawn || []).map(g => g.ric).join(", ")}.` : "") +
+      (meta.recoded || []).map(r => ` Reporter code changed by the filer: ${r.name} first filed as ${r.from_ric}; the host now serves the same file as ${r.to_ric} (every row identical apart from the code). Its receipts below are the ${r.to_ric} files, fetched ${r.observed_at} (UTC).`).join("");
   }
 
   // Receipts
   const recs = (meta.receipts && meta.receipts.files) || [];
   document.getElementById("receiptSummary").textContent = `File receipts (${recs.length} files, SHA-256)`;
   document.querySelector("#receiptsTable tbody").innerHTML = recs.map(f =>
-    `<tr><td>${EQ.esc(f.ric)} ${EQ.esc(f.kind)}${f.restated ? " (restated)" : ""}</td>` +
+    `<tr><td>${EQ.esc(f.ric)} ${EQ.esc(f.kind)}${f.restated ? " (restated)" : ""}${f.recoded_from ? ` (code was ${EQ.esc(f.recoded_from)})` : ""}</td>` +
     `<td class="num">${EQ.num(f.bytes)}</td>` +
     `<td><code>${EQ.esc((f.sha256 || "").slice(0, 24))}…</code></td>` +
     `<td class="num">${EQ.esc(f.last_modified || "")}</td>` +

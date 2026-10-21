@@ -167,3 +167,19 @@ def test_validation_contract():
 if __name__ == "__main__":
     import pytest
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+def test_recoded_reporters_shown_once():
+    """A filer that moved its file to a new reporter code appears once, under the new code,
+    and every receipt names a code that is actually a venue in this build."""
+    meta = load("meta.json")
+    venues = {v["ric"] for v in meta["venues"]}
+    for r in meta.get("recoded", []):
+        assert r["to_ric"] in venues
+        assert r["from_ric"] not in venues
+    receipt_rics = {f["ric"] for f in meta["receipts"]["files"]}
+    assert receipt_rics <= venues
+    cov = load("coverage.json")
+    for r in meta.get("recoded", []):
+        rows = [x for x in cov["reporters"] if x["ric"] in (r["to_ric"], r["from_ric"])]
+        assert len(rows) == 1 and rows[0]["status"] == "live_amended"

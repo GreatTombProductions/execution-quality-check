@@ -15,6 +15,10 @@
     if (restated.length) {
       parts.push(`${restated.length} reporter code${restated.length === 1 ? "" : "s"} replaced an August file after the first harvest (${restated.join(", ")}). Those rows are the current file. The first-filed copy is kept with the source build and is not what this page shows.`);
     }
+    const recoded = meta.recoded || [];
+    if (recoded.length) {
+      parts.push(recoded.map(r => `${r.name} filed August under reporter code ${r.from_ric}; its host now serves the same file as ${r.to_ric} (identical apart from the code), so it is shown once, as ${r.to_ric}.`).join(" "));
+    }
     if (gone.length) {
       parts.push(`Not shown, because the host no longer serves the file: ${gone.map(g => `${g.name || g.ric} (${g.ric})`).join(", ")}.`);
     }
