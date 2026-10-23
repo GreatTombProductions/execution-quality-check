@@ -32,7 +32,7 @@ receipts and the data-quality notes attached.
 
 ## Data
 
-170 reporters, 17.8M detailed rows for August 2026 (the month this site publishes; later
+169 reporters, 17.7M detailed rows for August 2026 (the month this site publishes; later
 months are added after their filing deadline, each with its own coverage ledger). Sources:
 
 | Source | Reporters | Notes |
@@ -81,6 +81,7 @@ pipeline/harvest_s3.py   shared-host census + downloads + receipts (one director
 pipeline/harvest_firms.py firm-hosted Download Sites: link discovery, content checks, receipts
 pipeline/finra_sweep.py  per-firm registered-vs-published ledger for FINRA-registered reporters
 pipeline/build.py        parse detailed files (header-driven, parallel per reporter), aggregate, emit site data
+pipeline/freshness.py    re-fetch receipted filings, scratch rebuild, compare against live or historical published data
 pipeline/aggregate.py    parsing + accumulation core (unit-tested)
 tests/                   Python tests (aggregation, data contract, shard parity, registry) + Playwright smoke
 ```
@@ -91,9 +92,58 @@ The published site is this repository. Rebuild commands that download the filing
 the source checkout; the checks below run here, with no download:
 
 ```bash
-python3 -m pytest tests/test_aggregate.py tests/test_data_contract.py tests/test_reporters.py tests/test_shard_parity.py -q
+python3 -m pytest tests/test_aggregate.py tests/test_data_contract.py tests/test_reporters.py tests/test_shard_parity.py tests/test_freshness.py -q
 python3 tests/run_browser_smoke.py
 ```
+
+### Check whether the published values still match the filings
+
+For a maintainer's **source checkout with the raw filing inputs and all three receipt
+collections already present**, one command re-fetches the filings and the live site's data:
+
+```bash
+python3 pipeline/freshness.py --month 202608 --output /tmp/execution-quality-freshness.json
+```
+
+The site-only repository does not include the raw inputs or discovery records. Without those,
+the check reports incomplete (exit 2); it cannot certify freshness from the published JSON alone.
+The command uses Python 3.11+ and curl, downloads every receipted filing (not just files with
+changed length/date), normalizes nested zip/gzip and headerless files, rebuilds with the same
+parser in a temporary tree, and compares all symbol shards plus comparison, scale, coverage,
+method and search data. It does not overwrite inputs, generated data, or the public site.
+
+- **Exit 0:** no differences in the numeric values and metadata backing the pages.
+- **Exit 1:** differences, with reporter names/codes, field paths, and before/after examples.
+- **Exit 2:** incomplete — unreachable or unparseable source, missing inputs, or failed rebuild.
+  This takes precedence over a clean/changed result. A previously documented absent URL
+  still returning 404 is counted separately, not silently passed off as a successful download.
+
+Every result names the month and says how many unique filing URLs it opened out of the
+receipt-defined total. Locally generated empty summaries and summaries extracted from an
+already-fetched zip are identified separately. An unavailable URL is not automatically a
+withdrawal: a replacement on its landing page is a recode only if every row matches after
+excluding the reporter-code column. Differences in container hashes alone are not changes.
+Numeric comparisons are exact at published-data precision, so they can conservatively flag
+changes smaller than browser rounding. Transport timestamps and container receipts are excluded
+from the value comparison; receipt identities (including URLs and availability flags) are compared.
+Download-vs-stored-input hashes and container-only / harvester-wrapper differences are informational
+in the JSON receipt; a stored hash pins the retained input, not a claim that the host still serves
+that exact container. Source-content changes are also reported even when no displayed value changes.
+
+**Scope limit:** this checks one month's receipted filings, not whether another firm has newly
+published, or whether the month picker changed. The FINRA directory, earlier sweep, shared-host
+census and coverage probes remain dated evidence; they are not re-crawled. Downloads and decompressed
+members are bounded to 512 MiB per filing. No schedule or promise of ongoing monitoring is implied.
+
+To compare with a historical published revision, point `--published` at that revision's
+month-data directory (rather than the live Pages baseline):
+
+```bash
+python3 pipeline/freshness.py --month 202608 --published /tmp/published-revision/data/202608
+```
+
+`pipeline/restatement_check.py` is the earlier length-only diagnostic; it is not a substitute
+for this full-content check.
 
 ## Notes
 
