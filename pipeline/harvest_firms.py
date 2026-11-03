@@ -344,11 +344,16 @@ def install(results):
     return receipts
 
 
+def firm_filter(argv=None):
+    """RICs or slugs to limit this run. `--month YYYYMM` is not a firm filter."""
+    return set(reporters.positionals(argv))
+
+
 def main():
     crawl = json.loads((RAW / "finra-crawl.json").read_text())
     s3 = json.loads((RAW / "harvest-receipts.json").read_text())
     taken = {f["ric"] for f in s3["files"] if f["ok"]}
-    only = set(sys.argv[1:])
+    only = firm_filter()
     jobs = []
     for slug, rec in crawl.items():
         if not rec.get("ok"):

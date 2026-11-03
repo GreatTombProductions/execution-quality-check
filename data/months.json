@@ -1,9 +1,14 @@
 {
-  "default": "202608",
+  "default": "202609",
   "months": [
     {
       "id": "202608",
       "label": "August 2026",
+      "published": true
+    },
+    {
+      "id": "202609",
+      "label": "September 2026",
       "published": true
     }
   ]

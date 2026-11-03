@@ -35,6 +35,19 @@ const { chromium } = require('playwright');
     assert(headers.some(h => h.startsWith('Effective spread')), 'comparison header missing');
     const firstRow = await page.$eval('#cmpTable tbody tr', tr => tr.textContent);
     assert(firstRow.includes('Cboe BZX'), 'venue row missing');
+    const publishedIds = months.months.filter(m => m.published).map(m => m.id).sort();
+    assert(month === publishedIds[publishedIds.length - 1], `default should be the latest published month, got ${month}`);
+    assert(publishedIds.includes('202608') && publishedIds.includes('202609'), `both months should be published, got ${publishedIds}`);
+
+    // August stays selectable and keeps its own recheck gaps.
+    response = await page.goto(base + '?month=202608', { waitUntil: 'networkidle' });
+    assert(response.ok(), `August page returned ${response.status()}`);
+    await page.waitForFunction(() => document.getElementById('monthSel').value === '202608');
+    await page.waitForFunction(() => document.querySelector('[data-month-label]').textContent.includes('August 2026'));
+    const augNote = await page.$eval('#filesAsOf', el => el.textContent);
+    assert(augNote.includes('GSCO') && augNote.includes('FTBR'), 'August recheck gaps should stay named');
+    response = await page.goto(base, { waitUntil: 'networkidle' });
+    await page.waitForFunction((id) => document.getElementById('monthSel').value === id, month);
 
     // effective spread cell should be populated for the default selection
     const effSpread = await page.$eval('#cmpTable tbody tr td:nth-child(5)', td => td.textContent.trim());
@@ -109,7 +122,7 @@ const { chromium } = require('playwright');
     const cov = await (await fetch(base + `data/${month}/coverage.json`)).json();
     response = await page.goto(base + 'coverage.html', { waitUntil: 'networkidle' });
     assert(response.ok(), `coverage page returned ${response.status()}`);
-    await page.waitForFunction(() => document.querySelectorAll('#covTable tbody tr').length >= 9);
+    await page.waitForFunction((n) => document.querySelectorAll('#covTable tbody tr').length === n, cov.entries.length);
     const badges = await page.$$eval('#covTable .badge', b => b.map(x => x.textContent));
     assert(badges.some(t => t.includes('Amended-format files live')), 'live badge missing');
     await page.waitForFunction((n) => document.querySelectorAll('#repTable tbody tr').length === n, cov.reporters.length);

@@ -2,7 +2,10 @@
 frontend depends on. Run after pipeline/build.py."""
 import json
 import sys
+import zipfile
 from pathlib import Path
+
+import pytest
 
 PROJECT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT / "pipeline"))
@@ -32,6 +35,33 @@ def generated_root():
 
 def load(name):
     return json.loads((generated_root() / name).read_text())
+
+
+def test_nested_zip_detailed_member_is_the_known_shape(tmp_path):
+    from build import open_detailed_stream
+    inner = tmp_path / "inner.zip"
+    with zipfile.ZipFile(inner, "w") as zf:
+        zf.writestr("IEXG202609.txt", "DsgntParticipant|RprtEntityCd\n")
+    outer = tmp_path / "detailed.zip"
+    with zipfile.ZipFile(outer, "w") as zf:
+        zf.write(inner, "IEXG202609.zip")
+        zf.writestr("IEXG202609.csv", "RprtEntityCd\n")
+    zf, member = open_detailed_stream(outer)
+    try:
+        assert member.readline().startswith(b"DsgntParticipant")
+    finally:
+        zf.close()
+
+
+def test_unseen_zip_layout_fails_closed(tmp_path):
+    from build import open_detailed_stream
+    outer = tmp_path / "detailed.zip"
+    with zipfile.ZipFile(outer, "w") as zf:
+        zf.writestr("notes.pdf", b"%PDF")
+        zf.writestr("a.zip", b"not-a-zip")
+        zf.writestr("b.zip", b"also-not")
+    with pytest.raises(RuntimeError):
+        open_detailed_stream(outer)
 
 
 def test_meta_contract():

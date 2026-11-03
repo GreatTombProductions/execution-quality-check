@@ -56,13 +56,27 @@ def read_json(path: Path):
 
 
 def open_detailed_stream(zip_path: Path):
-    """Return a text line iterator over the detailed member of a downloaded zip."""
+    """Return a text line iterator over the detailed member of a downloaded zip.
+
+    A txt/dat at the top is the August shape. One nested zip that itself holds
+    exactly one txt/dat is the shape harvest_firms already unwraps (outer zip
+    plus summary csv plus pdf). Any other arrangement fails closed.
+    """
     zf = zipfile.ZipFile(zip_path)
     names = [n for n in zf.namelist() if n.lower().endswith((".txt", ".dat"))]
-    if not names:
+    if names:
+        return zf, zf.open(names[0])
+    inner = [n for n in zf.namelist() if n.lower().endswith(".zip")]
+    if len(inner) != 1:
+        zf.close()
         raise RuntimeError(f"no .txt/.dat member in {zip_path}")
-    member = zf.open(names[0])
-    return zf, member
+    nested = zipfile.ZipFile(io.BytesIO(zf.read(inner[0])))
+    zf.close()
+    inner_names = [n for n in nested.namelist() if n.lower().endswith((".txt", ".dat"))]
+    if len(inner_names) != 1:
+        nested.close()
+        raise RuntimeError(f"nested zip in {zip_path} does not hold exactly one .txt/.dat member")
+    return nested, nested.open(inner_names[0])
 
 
 # ---------------------------------------------------------------------------

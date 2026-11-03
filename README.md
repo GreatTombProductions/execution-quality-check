@@ -20,20 +20,23 @@ receipts and the data-quality notes attached.
   effective-to-quoted ratio (EFQ), and 15-second / 1-minute realized spreads. Sort by any
   column; filter by reporter type (exchange, broker-dealer, OTC market maker, trading system)
   or find a firm by name.
-- **Symbol explorer** — look up any of the 14,534 covered symbols and see covered orders,
+- **Symbol explorer** — look up a symbol in the selected month and see covered orders,
   executed shares, price-improvement and spread statistics at each reporter that filed records
-  for it, computed from the detailed per-symbol records.
-- **Coverage** — who has published for August 2026 and who hasn't: 16 exchange venues and 151
-  of the 223 FINRA-registered reporters are in the build (plus 3 further reporter codes found on
-  registered firms' own pages); every other registered firm is listed with what was and was not
-  checked (refused, unreachable, PDF-only, legacy layout, no link on the page).
+  for it, computed from the detailed per-symbol records. August 2026 has 14,534 symbols;
+  September 2026 has 14,715.
+- **Coverage** — who has published for the selected month and who hasn't. August: 169 reporters,
+  151 of 223 FINRA-registered firms. September: 170 reporters, 153 of 223. A firm in one month
+  and not the other is missing from that month, not filled in from the other. Every other
+  registered firm is listed with what was and was not checked (refused, unreachable, PDF-only,
+  legacy layout, no link on the page).
 - **Method & sources** — file receipts (SHA-256), column semantics, per-reporter unit checks,
   sanity filters, and the filing anomalies found during the build.
 
 ## Data
 
-169 reporters, 17.7M detailed rows for August 2026 (the month this site publishes; later
-months are added after their filing deadline, each with its own coverage ledger). Sources:
+September 2026 is the default (170 reporters, 18,052,735 detailed rows, 4,047 summary rows).
+August 2026 stays selectable (169 reporters, 17,714,825 detailed rows, 4,127 summary rows).
+Each month has its own coverage ledger. Sources:
 
 | Source | Reporters | Notes |
 |---|---|---|

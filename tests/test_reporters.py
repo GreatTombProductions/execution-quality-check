@@ -22,6 +22,12 @@ def test_percent_point_reporters_are_exactly_cboe():
     assert pp == {"BATS", "BYXX", "EDGJ", "EDGK"}
 
 
+def test_month_flag_is_not_a_firm_filter():
+    import harvest_firms
+    assert harvest_firms.firm_filter(["--month", "202609"]) == set()
+    assert harvest_firms.firm_filter(["--month", "202609", "HOOD"]) == {"HOOD"}
+
+
 def test_harvest_roster_matches_receipts():
     path = PROJECT / "data" / "raw" / reporters.MONTH / "harvest-receipts.json"
     if not path.exists():
