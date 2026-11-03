@@ -22,6 +22,12 @@
     if (gone.length) {
       parts.push(`Not shown, because the host no longer serves the file: ${gone.map(g => `${g.name || g.ric} (${g.ric})`).join(", ")}.`);
     }
+    const gaps = meta.recheck_incomplete || [];
+    if (gaps.length) {
+      parts.push(gaps.map(g =>
+        `${g.name ? g.name + " (" + g.ric + ")" : g.ric} could not be reread on ${g.rechecked_at} (${g.failure}). The rows shown are still the ${g.last_fetched_at} capture. This is not a withdrawal and not a new fetch.`
+      ).join(" "));
+    }
     asOf.hidden = false;
     asOf.textContent = parts.join(" ");
   }

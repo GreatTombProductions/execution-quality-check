@@ -145,6 +145,8 @@
     asOf.textContent = `This page was checked against the hosts on ${meta.files_as_of} (UTC)` +
       (n ? `, when ${n} reporter code${n === 1 ? "" : "s"} had replaced an August file (${(meta.restated_rics || []).join(", ")}).` : ".") +
       ((meta.withdrawn || []).length ? ` Omitted because the host returned 404: ${(meta.withdrawn || []).map(g => g.ric).join(", ")}.` : "") +
+      ((meta.recheck_incomplete || []).length ? " Could not reread, so the rows shown are the earlier capture and were not freshly fetched: " +
+        (meta.recheck_incomplete || []).map(g => `${g.ric} (${g.failure}; last capture ${g.last_fetched_at}; recheck ${g.rechecked_at})`).join("; ") + "." : "") +
       (meta.recoded || []).map(r => ` Reporter code changed by the filer: ${r.name} first filed as ${r.from_ric}; the host now serves the same file as ${r.to_ric} (every row identical apart from the code). Its receipts below are the ${r.to_ric} files, fetched ${r.observed_at} (UTC).`).join("");
   }
 

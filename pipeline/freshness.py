@@ -161,6 +161,22 @@ def filing_path(raw, rec):
     return raw / rec["ric"] / ("detailed.zip" if rec["kind"] == "detailed" else "summary.csv")
 
 
+def dated_recheck_exception(raw, url):
+    """A named, dated failure to reread. Never a pass, and never a withdrawal.
+
+    The file is optional. A 404 does not match: that still goes through the
+    withdrawal and recode checks. Matching does not install stored bytes.
+    """
+    path = raw / "recheck-exceptions.json"
+    if not path.exists():
+        return None
+    doc = read(path)
+    for entry in doc.get("entries", []):
+        if entry.get("url") == url:
+            return entry
+    return None
+
+
 def recode_candidate(rec, stored, month, downloads, get):
     """A broken URL is not withdrawal when its landing page links a proven recode.
 
@@ -249,7 +265,13 @@ def prepare(project, scratch, month, get=fetch):
                     install(filing_path(target, rec), data, kind)
                     event["status"] = "synthetic_empty_summary"
                 elif url in failures:
-                    if not rec.get("ok") and "HTTP 404" in failures[url]:
+                    spec = dated_recheck_exception(raw, url)
+                    if spec and "HTTP 404" not in failures[url]:
+                        # Named gap: do not install the stored filing as if it had just been fetched.
+                        event.update(status="recheck_incomplete", last_fetched_at=rec.get("fetched_at"),
+                                     exception_failure=spec.get("failure"), recheck_error=failures[url])
+                        errors.append(event)
+                    elif not rec.get("ok") and "HTTP 404" in failures[url]:
                         event["status"] = "confirmed_previously_absent"
                     else:
                         replacement = None

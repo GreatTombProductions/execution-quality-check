@@ -109,6 +109,25 @@ def test_fetch_failure_cannot_rebuild_from_stored_copy(tmp_path):
     assert any(e.get("ric") == "FIRM" for e in result["errors"])
 
 
+def test_named_recheck_gap_is_not_a_fresh_copy(tmp_path):
+    project, raw, urls, get = source_tree(tmp_path)
+    url = "https://test/FIRM.zip"
+    f.write(raw / "recheck-exceptions.json", {"entries": [{
+        "ric": "FIRM", "url": url, "last_fetched_at": "2026-10-03T23:31:25Z", "failure": "HTTP 403",
+    }]})
+    def get403(target, dest):
+        if target == url:
+            raise RuntimeError("HTTP 403")
+        return get(target, dest)
+    def rebuild(*args):
+        pytest.fail("a named gap must not rebuild from stored bytes")
+    result = f.check(project, tmp_path / "published", MONTH, tmp_path / "scratch", get403, rebuild)
+    assert result["exit_code"] == 2
+    named = [e for e in result["events"] if e.get("status") == "recheck_incomplete"]
+    assert named and named[0]["url"] == url
+    assert not (tmp_path / "scratch" / "data" / "raw" / MONTH / "FIRM" / "detailed.zip").exists()
+
+
 def test_404_recode_requires_landing_link_and_full_content_equality(tmp_path):
     project, raw, urls, get = source_tree(tmp_path)
     doc = f.read(raw / f.RECEIPTS[-1])

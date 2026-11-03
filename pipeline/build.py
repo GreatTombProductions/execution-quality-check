@@ -529,8 +529,10 @@ def main(argv=None):
         },
         "receipts": receipts,
         "files_as_of": ledger.get("files_as_of"),
+        "recheck_checked_at": ledger.get("recheck_checked_at"),
         "restated_rics": sorted({e["ric"] for e in ledger.get("replaced", [])}),
         "withdrawn": ledger.get("withdrawn_reporters", []),
+        "recheck_incomplete": ledger.get("recheck_incomplete", []),
         "recoded": [{k: e.get(k) for k in ("from_ric", "to_ric", "name", "observed_at", "note")}
                     for e in ledger.get("recoded", [])],
         "summary_flag_bits": {
@@ -612,7 +614,12 @@ def build_coverage(venue_meta, venue_aggs):
     live_by_ric = {v["ric"]: v for v in venue_meta}
     ledger = load_restatement_ledger()
     restated = {e["ric"] for e in ledger.get("replaced", [])}
+    restated_when = {}
+    for entry in ledger.get("replaced", []):
+        if entry.get("fetched_at"):
+            restated_when[entry["ric"]] = entry["fetched_at"]
     withdrawn_note = {e["ric"]: e.get("note", "") for e in ledger.get("withdrawn_reporters", [])}
+    recheck_note = {e["ric"]: e.get("note", "") for e in ledger.get("recheck_incomplete", [])}
     recoded_note = {e["to_ric"]: e.get("note", "") for e in ledger.get("recoded", [])}
     harvest = read_json(RAW_DIR / "harvest-receipts.json") if (RAW_DIR / "harvest-receipts.json").exists() else None
     sweep_path = RAW_DIR / "finra-sweep.json"
@@ -676,10 +683,13 @@ def build_coverage(venue_meta, venue_aggs):
                     extra += f"; the file's own reporter code is {v['ric']}, not the registered {ric}"
                 entry["note"] = (entry["note"] + " " if entry["note"] else "") + extra + "."
             if v["ric"] in restated or ric in restated:
-                when = ledger.get("files_as_of") or "a later check"
+                when = restated_when.get(v["ric"]) or restated_when.get(ric) or ledger.get("files_as_of") or "a later check"
                 extra = (f"Restated after the first harvest. This page shows the file fetched on {when}, "
                          "not the first-filed copy, which is kept with the source build.")
                 entry["note"] = (entry["note"] + " " if entry["note"] else "") + extra
+            gap = recheck_note.get(v["ric"]) or recheck_note.get(ric)
+            if gap:
+                entry["note"] = (entry["note"] + " " if entry["note"] else "") + gap
             if v["ric"] in recoded_note:
                 entry["note"] = (entry["note"] + " " if entry["note"] else "") + recoded_note[v["ric"]]
         else:
